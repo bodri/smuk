@@ -1,2 +1,3 @@
-Drivers/
-Middlewares/
+*:Drivers/BSP/*
+*:Drivers/CMSIS/*
+*:Drivers/STM32H5xx_HAL_Driver/*

@@ -25,9 +25,15 @@
 CACHEDIR.TAG
 [Mm]kMultipleFiles.log
 .mxproject
+.project
+.cproject
+.settings/
 
 # CMake cache and local configurations (if run outside /build)
 CMakeCache.txt
 CMakeFiles/
 cmake_install.cmake
 Makefile
+
+# --- macOS System Files ---
+.DS_Store

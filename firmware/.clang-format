@@ -3,8 +3,8 @@ Language: Cpp
 IndentWidth: 4
 TabWidth: 4
 UseTab: Never
-ColumnLimit: 120
+ColumnLimit: 200
 AllowShortFunctionsOnASingleLine: None
 KeepEmptyLinesAtTheStartOfBlocks: false
-BreakBeforeBraces: Allman
+BreakBeforeBraces: Attach
 PointerAlignment: Left
