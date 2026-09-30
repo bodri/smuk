@@ -1,0 +1,39 @@
+# .github/workflows/firmware.yml
+name: Firmware Build & Verify
+
+on:
+  push:
+    paths:
+      - 'firmware/**'  # Triggers only when files change in the firmware directory
+      - '.github/workflows/firmware.yml'
+  pull_request:
+    paths:
+      - 'firmware/**'
+
+jobs:
+  build:
+    name: Cross-Compile Firmware
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Install ARM GNU Toolchain
+        uses: gcc-arm-embedded/program-arm-embedded-toolchain-action@v1
+
+      - name: Install CMake & Ninja
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake ninja-build
+
+      - name: Configure CMake
+        run: |
+          cd firmware
+          mkdir build && cd build
+          cmake -G Ninja -DCMAKE_TOOLCHAIN_FILE=../arm-none-eabi-gcc.cmake ..
+
+      - name: Compile Binary Targets
+        run: |
+          cd firmware/build
+          ninja
