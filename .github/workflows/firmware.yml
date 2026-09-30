@@ -4,15 +4,15 @@ name: Firmware Build & Verify
 on:
   push:
     paths:
-      - 'firmware/**'  # Triggers only when files change in the firmware directory
+      - 'firmware/**'
       - '.github/workflows/firmware.yml'
   pull_request:
     paths:
       - 'firmware/**'
 
 jobs:
-  build:
-    name: Cross-Compile Firmware
+  verify-and-build:
+    name: Lint, Analyze & Compile
     runs-on: ubuntu-latest
 
     steps:
@@ -22,18 +22,13 @@ jobs:
       - name: Install ARM GNU Toolchain
         uses: gcc-arm-embedded/program-arm-embedded-toolchain-action@v1
 
-      - name: Install CMake & Ninja
+      - name: Install Linting & Build Tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y cmake ninja-build
+          sudo apt-get install -y cmake ninja-build clang-format cppcheck
 
-      - name: Configure CMake
+      - name: Execute Static Checks and Compilation
         run: |
           cd firmware
-          mkdir build && cd build
-          cmake -G Ninja -DCMAKE_TOOLCHAIN_FILE=../arm-none-eabi-gcc.cmake ..
-
-      - name: Compile Binary Targets
-        run: |
-          cd firmware/build
-          ninja
+          chmod +x build.sh
+          ./build.sh

@@ -20,3 +20,8 @@ Compilation and deployment run out-of-source via automated helper tools. You can
 *   **Build Project Tree:** Run command `./build.sh` (or press **`cmd-b`** / **`ctrl-b`**).
 *   **Wipe & Rebuild:** Run command `./build.sh --clean`.
 *   **Flash Microcontroller:** Deploys the target output (`firmware/build/stm32h5-firmware.elf`) via OpenOCD over an ST-LINK v3 interface. Trigger by running the `"STM32H5: Flash Firmware"` Zed task (or press **`cmd-shift-b`** / **`ctrl-shift-b`**).
+
+## 🚨 Static Analysis & Linting Protocols
+- **Style Rules:** Code formatting follows the local `.clang-format` profile (Allman style braces, 4-space indents). Before committing modifications, run `clang-format -i <file>` to automatically polish layout aesthetics.
+- **Bug Prevention:** The build loop leverages `cppcheck`. Avoid generating naked arithmetic type pointer adjustments or uninitialized peripheral buffer indexes that violate static stability protocols.
+- **Local Validation Gate:** Execute `./build.sh` locally before submitting a Pull Request to catch styling discrepancies and analysis exceptions before the CI runner flags them.
