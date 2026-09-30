@@ -25,3 +25,8 @@ Compilation and deployment run out-of-source via automated helper tools. You can
 - **Style Rules:** Code formatting follows the local `.clang-format` profile (Allman style braces, 4-space indents). Before committing modifications, run `clang-format -i <file>` to automatically polish layout aesthetics.
 - **Bug Prevention:** The build loop leverages `cppcheck`. Avoid generating naked arithmetic type pointer adjustments or uninitialized peripheral buffer indexes that violate static stability protocols.
 - **Local Validation Gate:** Execute `./build.sh` locally before submitting a Pull Request to catch styling discrepancies and analysis exceptions before the CI runner flags them.
+
+## 🚨 Memory Limits & Calibration Guardrails
+- **Flash Memory Constraint:** The maximum flash allocation for application code is **strictly bounded at 112 KB**. 
+- **Calibration Area Safety:** The final sectors of the physical internal flash are reserved exclusively for device calibration. Do not exceed 112 KB.
+- **Footprint Validation:** The build pipeline enforces this checking mechanism automatically via `python3 check_limits.py`. If a code modification expands sector metrics over the budget allocation, the verification loop returns an execution error state.

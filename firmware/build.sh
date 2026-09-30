@@ -37,3 +37,14 @@ mkdir -p "$BUILD_DIR" && cd "$BUILD_DIR"
 echo -e "${YELLOW}⚙️  Configuring build environment...${NC}"
 cmake -G Ninja -DCMAKE_TOOLCHAIN_FILE=../arm-none-eabi-gcc.cmake ..
 ninja
+
+# 4. Success Check and Verification
+if [ $? -eq 0 ]; then
+    echo -e "${GREEN}✅ Build Completed Successfully!${NC}"
+
+    # 💾 Trigger Python Validator to check constraints
+    python3 ./check_limits.py "build/stm32h5-firmware.elf"
+else
+    echo -e "${RED}❌ Compilation failed.${NC}"
+    exit 1
+fi
