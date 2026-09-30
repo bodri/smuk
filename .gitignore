@@ -1,0 +1,22 @@
+# ==========================================
+# 🛠️ System and Editor Files (Global)
+# ==========================================
+# OS generated files
+.DS_Store
+.DS_Store?
+ehthumbs.db
+Thumbs.db
+[Tt]humbs.db
+
+# General Developer IDE Caches
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.swp
+*~
+
+# Zed Editor Specifics
+.zed/

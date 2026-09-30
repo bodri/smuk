@@ -1,0 +1,33 @@
+# ==========================================
+# 💻 Firmware Toolchain and IDE Artifacts
+# ==========================================
+# Native CMake / Ninja / Make build outputs
+/build/
+/bin/
+/obj/
+
+# Compiler Outputs & Memory Map files
+*.elf
+*.bin
+*.hex
+*.map
+*.o
+*.d
+*.su
+
+# STM32CubeIDE / Eclipse Artifacts
+/.settings/
+/Debug/
+/Release/
+*.launch
+
+# STM32CubeMX auto-generated backups & logs
+CACHEDIR.TAG
+[Mm]kMultipleFiles.log
+.mxproject
+
+# CMake cache and local configurations (if run outside /build)
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+Makefile

@@ -1,0 +1,34 @@
+# ==========================================
+# 📐 Hardware Design Tools (KiCad)
+# ==========================================
+
+# --- KiCad Specifics ---
+# Backup files
+.*.bak
+*.bak
+*.bck
+*.kicad_pcb-bak
+*.sch-bak
+
+# Cache and local session settings
+*.wbk
+fp-info-cache
+_autosave-*
+*.lock
+
+# Unrouted layout saving state
+*.unrouted
+
+# Local Workspace settings
+/__Previews/
+*.PcbDoc.htm
+*.SchDoc.htm
+
+# ==========================================
+# 📦 Exceptions (Keep Production Outputs)
+# ==========================================
+# Explicitly force tracking of final manufacturing files in production/
+!/production/**/*.pdf
+!/production/**/*.zip
+!/production/**/*.csv
+!/production/**/*.txt
