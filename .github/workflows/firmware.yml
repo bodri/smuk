@@ -13,7 +13,7 @@ on:
 jobs:
   verify-and-build:
     name: Lint, Analyze & Compile
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04  # 👈 Pin this to 24.04 instead of using ubuntu-latest
 
     steps:
       - name: Checkout Repository
