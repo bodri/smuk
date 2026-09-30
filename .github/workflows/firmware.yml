@@ -16,10 +16,10 @@ jobs:
     runs-on: ubuntu-24.04
 
     steps:
+      # 📜 UPDATED: Bumped checkout sub-version to resolve the Node 20 deprecation warning
       - name: Checkout Repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v4.2.2
 
-      # 📜 CHANGED: Swapped out the deleted repo for the active community alternative
       - name: Install ARM GNU Toolchain
         uses: carlosperate/arm-none-eabi-gcc-action@v1
 
