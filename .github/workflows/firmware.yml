@@ -13,14 +13,15 @@ on:
 jobs:
   verify-and-build:
     name: Lint, Analyze & Compile
-    runs-on: ubuntu-24.04  # 👈 Pin this to 24.04 instead of using ubuntu-latest
+    runs-on: ubuntu-24.04
 
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
+      # 📜 CHANGED: Swapped out the deleted repo for the active community alternative
       - name: Install ARM GNU Toolchain
-        uses: gcc-arm-embedded/program-arm-embedded-toolchain-action@v1
+        uses: carlosperate/arm-none-eabi-gcc-action@v1
 
       - name: Install Linting & Build Tools
         run: |
