@@ -16,9 +16,9 @@ jobs:
     runs-on: ubuntu-24.04
 
     steps:
-      # 📜 UPDATED: Bumped checkout sub-version to resolve the Node 20 deprecation warning
+      # 📜 FIXED: Switched to v5 to native-target the required runner architecture
       - name: Checkout Repository
-        uses: actions/checkout@v4.2.2
+        uses: actions/checkout@v5
 
       - name: Install ARM GNU Toolchain
         uses: carlosperate/arm-none-eabi-gcc-action@v1
