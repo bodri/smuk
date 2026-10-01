@@ -31,7 +31,6 @@ typedef enum { SMU_CAL_LOAD_OK = 0, SMU_CAL_LOAD_DEFAULTS, SMU_CAL_LOAD_INVALID 
 void smu_cal_record_defaults(smu_cal_record_t* rec);
 void smu_cal_record_finalize(smu_cal_record_t* rec);
 bool smu_cal_record_validate(const smu_cal_record_t* rec);
-uint32_t smu_cal_crc32(const void* data, uint32_t len);
 
 // Storage backend
 void smu_cal_store_init(void);

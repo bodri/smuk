@@ -1,6 +1,6 @@
 #ifndef SMU_MEASUREMENT_H
 #define SMU_MEASUREMENT_H
-#include "../Drivers/SMU/ads131m03.h"
+#include "ads131m03.h"
 #include "smu_types.h"
 #include <stdbool.h>
 #include <stdint.h>

@@ -15,7 +15,7 @@ First inspect the complete project and propose a refactoring plan before editing
 - smu_calibration: calibration coefficients/fitting/application
 - smu_cal_seq: safe calibration acquisition sequencing
 - calibration_store: Flash persistence only
-- I really like to make the implementation HAL agnostic. For example, you can see ads131m03_bringup: all code which needs to call the HAL goes into the ads131m03_bringup_port. And the implemetation of the port goes into the ads131m03_bringup_port_hal file under the Platform directory. In this way, the HAL implementation can be swapped out without modifying the rest of the code. Please follow this pattern when adding new HAL agnostic code.
+- I really like to make the implementation HAL agnostic. For example, you can see ads131m03: all code which needs to call the HAL goes into the ads131m03_port. And the implemetation of the port goes into the ads131m03_port_hal.c file under the Platform directory. In this way, the HAL implementation can be swapped out without modifying the rest of the code. Please follow this pattern when adding new HAL agnostic code.
 
 ## Important constraints
 

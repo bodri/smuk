@@ -330,16 +330,22 @@ int main(void) {
                  */
                 smu_outputs = out;
             }
-        }
 
-        /*
-         * Feed completed ADC samples to calibration sequencer.
-         */
-        if ((cal_seq.state == CAL_SEQ_DISCARD) || (cal_seq.state == CAL_SEQ_ACQUIRE)) {
-            if (cal_seq.target == CAL_TARGET_VOLTAGE) {
-                smu_cal_seq_adc_frame(&cal_seq, f.ch1, f.ch2);
-            } else {
-                smu_cal_seq_adc_frame(&cal_seq, f.ch0, f.ch2);
+            /*
+             * Feed this ADC sample to the calibration sequencer.
+             *
+             * Must run once per popped frame, inside this loop:
+             * the outer loop spins far faster than the ADC output
+             * rate, so sampling "f" out here would double-count
+             * stale frames (or read uninitialized stack memory on
+             * iterations where nothing was popped).
+             */
+            if ((cal_seq.state == CAL_SEQ_DISCARD) || (cal_seq.state == CAL_SEQ_ACQUIRE)) {
+                if (cal_seq.target == CAL_TARGET_VOLTAGE) {
+                    smu_cal_seq_adc_frame(&cal_seq, f.ch1, f.ch2);
+                } else {
+                    smu_cal_seq_adc_frame(&cal_seq, f.ch0, f.ch2);
+                }
             }
         }
 
