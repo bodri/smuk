@@ -72,11 +72,6 @@ smu_measurement_outputs_t smu_outputs;
 smu_cal_seq_t cal_seq;
 volatile bool test_start_vcal = false;
 
-typedef enum { VCAL_TEST_IDLE = 0, VCAL_TEST_GND, VCAL_TEST_P1V5, VCAL_TEST_P3V, VCAL_TEST_DONE, VCAL_TEST_FAULT } vcal_test_state_t;
-
-volatile vcal_test_state_t vcal_test_state = VCAL_TEST_IDLE;
-volatile bool test_start_vcal_3pt = false;
-
 volatile bool test_vcal_capture_gnd = false;
 volatile bool test_vcal_capture_1v5 = false;
 volatile bool test_vcal_capture_3v0 = false;
@@ -129,70 +124,6 @@ void HAL_SPI_ErrorCallback(SPI_HandleTypeDef* hspi) {
     if (hspi->Instance == SPI1) {
         ads131m03_dma_error_isr();
     }
-}
-
-static float vcal_target_to_nominal_voltage(float average_code) {
-    float adc_v = smu_ads_code_to_volts((int32_t)average_code);
-
-    return smu_voltage_from_adc(adc_v, SMU_VRANGE_15V);
-}
-
-static bool vcal_fit_3point(void) {
-    float sx = 0.0f;
-    float sy = 0.0f;
-    float sxx = 0.0f;
-    float sxy = 0.0f;
-
-    for (int i = 0; i < 3; i++) {
-        float x = vcal_x[i];
-        float y = vcal_y[i];
-
-        sx += x;
-        sy += y;
-        sxx += x * x;
-        sxy += x * y;
-    }
-
-    const float n = 3.0f;
-
-    float denominator = n * sxx - sx * sx;
-
-    if ((denominator > -1.0e-12f) && (denominator < 1.0e-12f)) {
-        return false;
-    }
-
-    float gain = (n * sxy - sx * sy) / denominator;
-
-    float offset = (sy - gain * sx) / n;
-
-    vcal_fit_gain = gain;
-    vcal_fit_offset = offset;
-
-    for (int i = 0; i < 3; i++) {
-        float predicted = gain * vcal_x[i] + offset;
-
-        vcal_residual[i] = vcal_y[i] - predicted;
-    }
-
-    vcal_fit_ready = true;
-
-    return true;
-}
-
-/*
- * Convert averaged ADS131M03 CH2 code into calibrated CALBUS voltage.
- *
- * CH2 nominal analog scaling is CALBUS / 3.
- * Then apply the CALBUS calibration already stored in Flash.
- */
-static float vcal_code_to_calbus_voltage(int32_t code) {
-    const float adc_v = ((float)code * 1.2f) / 8388608.0f;
-
-    const float nominal_calbus_v = adc_v * 3.0f;
-
-    const smu_cal_record_t* cal = smu_calibration_get();
-
-    return (nominal_calbus_v * cal->measurement.calbus.gain) + cal->measurement.calbus.offset;
 }
 
 /* USER CODE END 0 */
@@ -412,13 +343,13 @@ int main(void) {
                  *
                  * Do NOT apply stored voltage calibration here.
                  */
-                vcal_x[p] = vcal_target_to_nominal_voltage(cal_seq.target_average);
+                vcal_x[p] = smu_calibration_vcal_nominal_voltage(cal_seq.target_average);
 
                 /*
                  * CH2:
                  * Use already-calibrated CALBUS as our reference.
                  */
-                vcal_y[p] = vcal_code_to_calbus_voltage((int32_t)cal_seq.calbus_average);
+                vcal_y[p] = smu_calibration_vcal_calbus_voltage((int32_t)cal_seq.calbus_average);
 
                 vcal_point_valid[p] = true;
 
@@ -429,7 +360,16 @@ int main(void) {
                  * three manually acquired points exist.
                  */
                 if (vcal_point_valid[0] && vcal_point_valid[1] && vcal_point_valid[2]) {
-                    if (!vcal_fit_3point()) {
+                    float gain = 0.0f, offset = 0.0f, residual[3] = {0.0f, 0.0f, 0.0f};
+
+                    if (smu_calibration_vcal_fit(vcal_x, vcal_y, &gain, &offset, residual)) {
+                        vcal_fit_gain = gain;
+                        vcal_fit_offset = offset;
+                        vcal_residual[0] = residual[0];
+                        vcal_residual[1] = residual[1];
+                        vcal_residual[2] = residual[2];
+                        vcal_fit_ready = true;
+                    } else {
                         vcal_test_fault = true;
                     }
                 }
@@ -445,22 +385,7 @@ int main(void) {
              * three-point calibration.
              */
             if (vcal_fit_ready && vcal_point_valid[0] && vcal_point_valid[1] && vcal_point_valid[2] && !vcal_test_fault && !cal_seq.fault) {
-                /*
-                 * Start from the currently active calibration record
-                 * so we preserve CALBUS calibration and everything else.
-                 */
-                smu_cal_record_t candidate = *smu_calibration_get();
-
-                candidate.measurement.voltage[SMU_VRANGE_15V].gain = vcal_fit_gain;
-
-                candidate.measurement.voltage[SMU_VRANGE_15V].offset = vcal_fit_offset;
-
-                /*
-                 * Increment calibration generation.
-                 */
-                candidate.sequence++;
-
-                vcal_commit_ok = smu_calibration_commit(&candidate);
+                vcal_commit_ok = smu_calibration_vforce_commit(vcal_fit_gain, vcal_fit_offset);
             }
         }
 

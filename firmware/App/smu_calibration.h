@@ -3,6 +3,7 @@
 #include "calibration_store.h"
 #include "smu_measurement.h"
 #include <stdbool.h>
+#include <stdint.h>
 
 void smu_calibration_init(void);
 const smu_cal_record_t* smu_calibration_get(void);
@@ -10,5 +11,24 @@ bool smu_calibration_commit(const smu_cal_record_t* candidate);
 void smu_calibration_apply_to_measurement(void);
 float smu_calibration_vforce_command(float physical_volts);
 float smu_calibration_iforce_command(float nominal_command, smu_current_range_t range);
+
+/* ------------------------------------------------------------------------
+ * Voltage calibration (3-point VMEAS-to-CALBUS fit)
+ * ------------------------------------------------------------------------ */
+
+/* Raw ADS131M03 CH1 average code -> nominal (uncalibrated) SENSE voltage. */
+float smu_calibration_vcal_nominal_voltage(float average_code);
+
+/* Raw ADS131M03 CH2 average code -> calibrated CALBUS reference voltage. */
+float smu_calibration_vcal_calbus_voltage(int32_t code);
+
+/* Least-squares fit of 3 (nominal, calbus) points. Writes *gain, *offset and
+ * residual[3] only on success; leaves them untouched if the points are
+ * degenerate (near-singular fit). */
+bool smu_calibration_vcal_fit(const volatile float x[3], const volatile float y[3], float* gain, float* offset, float residual[3]);
+
+/* Commits gain/offset as the 15V range voltage calibration, preserving the
+ * rest of the currently active calibration record. */
+bool smu_calibration_vforce_commit(float gain, float offset);
 
 #endif
