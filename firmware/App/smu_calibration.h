@@ -1,6 +1,6 @@
 #ifndef SMU_CALIBRATION_H
 #define SMU_CALIBRATION_H
-#include "../Storage/calibration_store.h"
+#include "calibration_store.h"
 #include "smu_measurement.h"
 #include <stdbool.h>
 
