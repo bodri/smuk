@@ -34,15 +34,17 @@ typedef struct {
     int32_t adc_i_raw, adc_v_raw, adc_cal_raw;
     float current_A, voltage_V, calbus_V;
     smu_current_range_t range;
+    smu_voltage_range_t vrange;
     bool valid, compliance, overload, range_transition;
 } smu_measurement_t;
 
 typedef struct {
     smu_state_t state;
-    smu_force_mode_t mode;
     smu_current_range_t range;
-    smu_measurement_t meas;
+    smu_voltage_range_t vrange;
     uint32_t faults;
-    bool output_requested, servo_enabled, measurement_valid;
+    uint32_t frame_count;
+    uint32_t range_switch_count;
+    bool autorange, measurement_valid, overload;
 } smu_context_t;
 #endif

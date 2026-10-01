@@ -1,143 +1,174 @@
 #include "smu.h"
-#include "../Drivers/SMU/ad5686.h"
-#include "../Drivers/SMU/ads131m03.h"
-#include "../Drivers/SMU/range_hw.h"
-#include "../Drivers/SMU/safety_hw.h"
+#include "ads131m03.h"
+#include "ads131m03_port.h"
+#include "calibration_store.h"
+#include "smu_cal_debug.h"
+#include "smu_calibration.h"
+#include "smu_port.h"
 #include <string.h>
 
 static smu_context_t g;
-static uint32_t state_ms;
-static void enter(smu_state_t s) {
-    g.state = s;
-    state_ms = 0;
-}
-static void fault(uint32_t f) {
-    g.faults |= f;
-    smu_output_disable();
-    enter(SMU_STATE_FAULT);
+static smu_range_manager_t ranges;
+static uint32_t last_ms;
+
+/* Non-static for debugger watch windows (previously in main.c). */
+ads131m03_bringup_result_t ads_result;
+const ads131m03_dma_status_t* ads_dma_status = NULL;
+ads131m03_dma_frame_t adc_frame;
+smu_measurement_outputs_t smu_outputs;
+
+static void fault(uint32_t bits) {
+    g.faults |= bits;
+    g.state = SMU_STATE_FAULT;
+    smu_measurement_set_valid(false);
 }
 
-void smu_init(void) {
+bool smu_init(void) {
     memset(&g, 0, sizeof(g));
     g.state = SMU_STATE_POWER_UP;
-    g.range = SMU_RANGE_NONE;
-    safety_hw_init_safe();
-    range_hw_all_off();
+    g.autorange = true;
+
+    /*
+     * smu_cal_store_init() DOES NOT erase Flash.
+     * smu_calibration_init() loads the newest valid Flash calibration (or
+     * unity defaults) and initialises smu_measurement with it.
+     */
+    smu_cal_store_init();
+    smu_calibration_init();
+    smu_cal_debug_init();
+    smu_range_init(&ranges);
+
+    if (!ads131m03_bringup_run(&ads_result)) {
+        fault(SMU_FAULT_ADC);
+        return false;
+    }
+
+    /* Boot ranges are driven before acquisition starts; the first frames
+     * after DRDY is enabled are dropped while they settle. */
+    (void)smu_range_request(&ranges, SMU_RANGE_1P5A, SMU_RANGE_REASON_USER);
+    (void)smu_range_request_voltage(&ranges, SMU_VRANGE_15V);
+    smu_range_tick_ms(&ranges, 0u);
+    if (ranges.tx_state == SMU_RANGE_TX_FAULT) {
+        fault(SMU_FAULT_RANGE);
+        return false;
+    }
+    smu_range_set_autorange(&ranges, g.autorange);
+    smu_measurement_set_valid(true);
+
+    ads131m03_dma_init();
+    ads_dma_status = ads131m03_dma_get_status();
+    ads131m03_port_drdy_enable(true);
+
+    last_ms = smu_port_millis();
+    g.state = SMU_STATE_NORMAL;
+    return true;
 }
 
-void smu_tick_1khz(void) {
-    state_ms++;
-    safety_hw_watchdog_heartbeat();
-}
+static void process_frames(void) {
+    ads131m03_dma_frame_t f;
 
-void smu_process(void) {
-    switch (g.state) {
-    case SMU_STATE_POWER_UP:
-        safety_hw_disable_pa();
-        range_hw_all_off();
-        if (!ad5686_init()) {
-            fault(SMU_FAULT_DAC);
-            break;
-        }
-        if (!ads131m03_init() || !ads131m03_start()) {
-            fault(SMU_FAULT_ADC);
-            break;
-        }
-        enter(SMU_STATE_SELF_TEST);
-        break;
-    case SMU_STATE_SELF_TEST:
-        if (!safety_hw_power_good()) {
-            if (state_ms > 100)
-                fault(SMU_FAULT_POWER);
-            break;
-        }
-        if (!range_hw_verify_one_hot(SMU_RANGE_NONE)) {
-            fault(SMU_FAULT_RANGE);
-            break;
-        }
-        enter(SMU_STATE_OUTPUT_OFF);
-        break;
-    case SMU_STATE_OUTPUT_OFF:
-        break;
-    case SMU_STATE_OUTPUT_STARTING:
-        if (!range_hw_verify_one_hot(SMU_RANGE_1P5A)) {
-            if (state_ms > 10)
-                fault(SMU_FAULT_RANGE);
-            break;
-        }
-        if (!safety_hw_request_pa_enable()) {
-            fault(SMU_FAULT_POWER);
-            break;
-        }
-        g.measurement_valid = false;
-        enter(SMU_STATE_NORMAL);
-        break;
-    case SMU_STATE_NORMAL:
-        if (safety_hw_compliance_active()) {
-            g.servo_enabled = false;
-            enter(SMU_STATE_COMPLIANCE);
-        }
-        break;
-    case SMU_STATE_COMPLIANCE:
-        g.servo_enabled = false;
-        if (!safety_hw_compliance_active() && state_ms >= 5)
-            enter(SMU_STATE_NORMAL);
-        break;
-    case SMU_STATE_RANGE_CHANGE: /* transition policy intentionally deferred to hardware bring-up */
-        break;
-    case SMU_STATE_CALIBRATION:
-        break;
-    case SMU_STATE_FAULT:
-        safety_hw_disable_pa();
-        range_hw_all_off();
-        break;
-    default:
-        fault(SMU_FAULT_SELFTEST);
-        break;
+    while (ads131m03_dma_pop(&f)) {
+        adc_frame = f;
+        g.frame_count++;
+
+        smu_cal_debug_frame(&f);
+
+        if (!smu_range_accept_frame(&ranges))
+            continue;
+
+        /* CRC was already checked in the DMA ISR; bad frames never reach the ring. */
+        ads131m03_frame_t mf = {0};
+        mf.ch[0] = f.ch0;
+        mf.ch[1] = f.ch1;
+        mf.ch[2] = f.ch2;
+        mf.crc_ok = true;
+
+        if (!smu_measurement_process_frame(&mf))
+            continue;
+        smu_measurement_get_outputs(&smu_outputs);
+
+        if (g.state == SMU_STATE_NORMAL)
+            smu_range_autorange_frame(&ranges, f.ch0, smu_outputs.fast.current_A);
     }
 }
 
-smu_status_t smu_output_enable(void) {
-    if (g.state != SMU_STATE_OUTPUT_OFF || g.faults)
-        return SMU_ERR_STATE;
-    g.output_requested = true;
-    g.measurement_valid = false;
-    g.servo_enabled = false;
-    range_hw_all_off();
-    range_hw_command(SMU_RANGE_1P5A, true);
-    g.range = SMU_RANGE_1P5A;
-    enter(SMU_STATE_OUTPUT_STARTING);
-    return SMU_OK;
+/* The calibration sequencer opens all shunts itself, so ranges are left alone
+ * while it runs and driven again once it is done. */
+static void update_calibration_state(void) {
+    const bool calibrating = smu_cal_debug_active();
+
+    if (smu_cal_debug_faulted()) {
+        fault(SMU_FAULT_CAL);
+    } else if (calibrating && g.state == SMU_STATE_NORMAL) {
+        g.state = SMU_STATE_CALIBRATION;
+        smu_range_set_autorange(&ranges, false);
+        smu_measurement_set_valid(false);
+    } else if (!calibrating && g.state == SMU_STATE_CALIBRATION) {
+        g.state = SMU_STATE_NORMAL;
+        smu_range_reassert(&ranges);
+        smu_range_set_autorange(&ranges, g.autorange);
+        smu_measurement_set_valid(true);
+    }
 }
 
-void smu_output_disable(void) {
-    safety_hw_disable_pa();
-    range_hw_all_off();
-    g.output_requested = false;
-    g.servo_enabled = false;
-    g.measurement_valid = false;
-    g.range = SMU_RANGE_NONE;
-    if (g.state != SMU_STATE_FAULT)
-        enter(SMU_STATE_OUTPUT_OFF);
+void smu_process(void) {
+    if (g.state == SMU_STATE_POWER_UP)
+        return;
+
+    process_frames();
+
+    const uint32_t now = smu_port_millis();
+    const uint32_t elapsed_ms = now - last_ms;
+    last_ms = now;
+
+    smu_cal_debug_process(elapsed_ms);
+    update_calibration_state();
+
+    if (g.state == SMU_STATE_NORMAL) {
+        smu_range_tick_ms(&ranges, elapsed_ms);
+        if (ranges.tx_state == SMU_RANGE_TX_FAULT)
+            fault(SMU_FAULT_RANGE);
+    }
+
+    g.range = ranges.active;
+    g.vrange = ranges.vactive;
+    g.overload = ranges.overload;
+    g.range_switch_count = ranges.switch_count;
+    g.measurement_valid = (g.state == SMU_STATE_NORMAL) && ranges.measurement_valid;
 }
 
-smu_status_t smu_set_mode(smu_force_mode_t mode) {
-    if (g.state != SMU_STATE_OUTPUT_OFF)
-        return SMU_ERR_STATE;
-    g.mode = mode;
-    return SMU_OK;
+void smu_get_measurement(smu_measurement_outputs_t* out) {
+    smu_measurement_get_outputs(out);
 }
-smu_status_t smu_request_range(smu_current_range_t r) {
-    if (r == SMU_RANGE_NONE)
-        return SMU_ERR_ARG;
-    if (g.state != SMU_STATE_NORMAL)
-        return SMU_ERR_STATE;
-    g.measurement_valid = false;
-    g.servo_enabled = false;
-    enter(SMU_STATE_RANGE_CHANGE);
-    (void)r;
-    return SMU_OK;
-}
+
 const smu_context_t* smu_get_context(void) {
     return &g;
+}
+
+smu_status_t smu_set_current_range(smu_current_range_t range) {
+    if (g.state != SMU_STATE_NORMAL)
+        return SMU_ERR_STATE;
+    g.autorange = false;
+    smu_range_set_autorange(&ranges, false);
+    if (!smu_range_request(&ranges, range, SMU_RANGE_REASON_USER))
+        return (ranges.error == SMU_RANGE_ERR_BAD_REQUEST) ? SMU_ERR_ARG : SMU_ERR_STATE;
+    return SMU_OK;
+}
+
+void smu_set_autorange(bool enabled) {
+    g.autorange = enabled;
+    if (g.state == SMU_STATE_NORMAL)
+        smu_range_set_autorange(&ranges, enabled);
+}
+
+smu_status_t smu_set_voltage_range(smu_voltage_range_t range) {
+    if (g.state != SMU_STATE_NORMAL)
+        return SMU_ERR_STATE;
+    if (!smu_range_request_voltage(&ranges, range))
+        return (ranges.error == SMU_RANGE_ERR_BAD_REQUEST) ? SMU_ERR_ARG : SMU_ERR_STATE;
+    return SMU_OK;
+}
+
+smu_range_config_t* smu_range_config(void) {
+    return &ranges.cfg;
 }

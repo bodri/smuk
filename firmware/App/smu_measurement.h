@@ -31,11 +31,15 @@ void smu_measurement_init(const smu_measurement_cal_t* cal, const smu_filter_con
 /* Foreground only. Preserve ranges, flags, configuration and sample count;
  * reset filter history and invalidate cached outputs until the next frame. */
 void smu_measurement_set_calibration(const smu_measurement_cal_t* cal);
+/* Foreground only. Drop filter history and invalidate cached outputs, e.g.
+ * after a range switch, so samples from different ranges are never mixed. */
+void smu_measurement_reset_filters(void);
 void smu_measurement_set_current_range(smu_current_range_t range);
 void smu_measurement_set_voltage_range(smu_voltage_range_t range);
 void smu_measurement_set_valid(bool valid);
 void smu_measurement_set_compliance(bool active);
 void smu_measurement_set_range_transition(bool active);
+void smu_measurement_set_overload(bool active);
 bool smu_measurement_process_frame(const ads131m03_frame_t* frame);
 void smu_measurement_get_outputs(smu_measurement_outputs_t* out);
 

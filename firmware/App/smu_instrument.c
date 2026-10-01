@@ -54,6 +54,8 @@ static void monitor_fault_inputs(smu_instrument_t* s) {
 }
 
 void smu_instrument_tick_1ms(smu_instrument_t* s, float abs_current_A, bool compliance_active) {
+    /* Autorange is fed per ADC frame via smu_range_autorange_frame(). */
+    (void)abs_current_A;
     s->state_ms++;
     monitor_fault_inputs(s);
 
@@ -85,7 +87,7 @@ void smu_instrument_tick_1ms(smu_instrument_t* s, float abs_current_A, bool comp
         break;
 
     case SMU_STATE_OUTPUT_STARTING:
-        smu_range_tick_1ms(&s->range, abs_current_A);
+        smu_range_tick_ms(&s->range, 1u);
         if (!smu_range_busy(&s->range) && s->range.active == SMU_RANGE_1P5A && s->range.measurement_valid) {
             safety_hw_enable_pa_request();
             s->state = SMU_STATE_NORMAL;
@@ -95,7 +97,7 @@ void smu_instrument_tick_1ms(smu_instrument_t* s, float abs_current_A, bool comp
 
     case SMU_STATE_NORMAL:
     case SMU_STATE_COMPLIANCE:
-        smu_range_tick_1ms(&s->range, abs_current_A);
+        smu_range_tick_ms(&s->range, 1u);
         smu_compliance_update(&s->compliance, compliance_active, s->range.measurement_valid, smu_range_busy(&s->range));
         s->measurement_valid = s->range.measurement_valid && !smu_range_busy(&s->range);
         s->precision_servo_allowed = s->compliance.servo_allowed && s->measurement_valid;
@@ -104,7 +106,7 @@ void smu_instrument_tick_1ms(smu_instrument_t* s, float abs_current_A, bool comp
 
     case SMU_STATE_RANGE_CHANGE:
         /* Reserved for UI/reporting; range manager is transactional. */
-        smu_range_tick_1ms(&s->range, abs_current_A);
+        smu_range_tick_ms(&s->range, 1u);
         break;
 
     case SMU_STATE_CALIBRATION:

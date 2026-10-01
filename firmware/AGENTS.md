@@ -2,7 +2,7 @@
 
 You are operating inside the embedded software workspace. Code generated here executes on an **STM32H5 High-Performance Microcontroller** (ARM Cortex-M33 architecture).
 
-The ADS131M03 SPI/GPDMA acquisition, measurement conversion, CALBUS calibration, voltage calibration, and Flash calibration storage are currently working and must remain functional. Do not look at the code in the App directory it does not work yet. Do not modify it.
+At the moment only the measurement hardware is working. The ADS131M03 SPI/GPDMA acquisition, measurement conversion, CALBUS calibration, voltage calibration, and Flash calibration storage are currently working and must remain functional. The power amplifier and compliance hardware is not yet build same goes for the DAC.
 
 First inspect the complete project and propose a refactoring plan before editing anything.
 

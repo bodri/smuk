@@ -10,7 +10,7 @@ typedef struct {
     smu_filter_config_t cfg;
     smu_current_range_t irange;
     smu_voltage_range_t vrange;
-    bool valid, compliance, transition;
+    bool valid, compliance, transition, overload;
     bool fast_started;
     float fi, fv, fc;
     float pi[PREC_MAX], pv[PREC_MAX], pc[PREC_MAX];
@@ -56,9 +56,10 @@ static void fill(smu_measurement_t* m, const ads131m03_frame_t* f, float i, floa
     m->voltage_V = v;
     m->calbus_V = c;
     m->range = g.irange;
+    m->vrange = g.vrange;
     m->valid = g.valid && !g.transition && f->crc_ok;
     m->compliance = g.compliance;
-    m->overload = false;
+    m->overload = g.overload;
     m->range_transition = g.transition;
 }
 
@@ -88,6 +89,10 @@ void smu_measurement_set_calibration(const smu_measurement_cal_t* cal) {
     if (!cal)
         return;
     g.cal = *cal;
+    smu_measurement_reset_filters();
+}
+
+void smu_measurement_reset_filters(void) {
     g.fast_started = false;
     g.fi = g.fv = g.fc = 0.0f;
     memset(g.pi, 0, sizeof(g.pi));
@@ -113,6 +118,9 @@ void smu_measurement_set_compliance(bool v) {
 }
 void smu_measurement_set_range_transition(bool v) {
     g.transition = v;
+}
+void smu_measurement_set_overload(bool v) {
+    g.overload = v;
 }
 
 bool smu_measurement_process_frame(const ads131m03_frame_t* f) {

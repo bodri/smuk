@@ -1,7 +1,35 @@
 #include "ads131m03_port.h"
 
+#include "ads131m03.h"
 #include "main.h"
 #include "spi.h"
+
+static volatile bool drdy_enabled = false;
+
+void ads131m03_port_drdy_enable(bool enabled) {
+    if (enabled)
+        __HAL_GPIO_EXTI_CLEAR_IT(NDRDY_Pin);
+    drdy_enabled = enabled;
+}
+
+/* HAL callbacks: route board interrupts to the driver ISRs. */
+void HAL_GPIO_EXTI_Falling_Callback(uint16_t GPIO_Pin) {
+    if (GPIO_Pin == NDRDY_Pin && drdy_enabled) {
+        ads131m03_dma_drdy_isr();
+    }
+}
+
+void HAL_SPI_TxRxCpltCallback(SPI_HandleTypeDef* hspi) {
+    if (hspi->Instance == SPI1) {
+        ads131m03_dma_complete_isr();
+    }
+}
+
+void HAL_SPI_ErrorCallback(SPI_HandleTypeDef* hspi) {
+    if (hspi->Instance == SPI1) {
+        ads131m03_dma_error_isr();
+    }
+}
 
 /* SPI1 full-duplex DMA; PB8 is the active-low GPIO chip select. */
 bool ads131m03_port_init(void) {

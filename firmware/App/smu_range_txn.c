@@ -23,12 +23,14 @@ void smu_force_i_range_txn_adc_frame(smu_force_i_range_txn_t* t) {
         t->discarded++;
 }
 void smu_force_i_range_txn_tick_1ms(smu_force_i_range_txn_t* t, smu_range_manager_t* rm, smu_control_t* ctl, const smu_cal_record_t* cal, float abs_current_A) {
+    /* Autorange is fed per ADC frame via smu_range_autorange_frame(). */
+    (void)abs_current_A;
     t->state_ms++;
     switch (t->state) {
     case SMU_FI_TX_IDLE:
         return;
     case SMU_FI_TX_RANGE:
-        smu_range_tick_1ms(rm, abs_current_A);
+        smu_range_tick_ms(rm, 1u);
         if (rm->tx_state == SMU_RANGE_TX_FAULT) {
             t->fault = true;
             t->state = SMU_FI_TX_FAULT;

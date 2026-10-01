@@ -25,10 +25,7 @@ echo -e "${YELLOW}🔍 Running Code Integrity Analysis...${NC}"
 # 1. Formatting & Auto-Correction (clang-format Option 1)
 if command -v clang-format &> /dev/null; then
     echo "  -> Auto-formatting layout to match code guidelines..."
-    find Core/Src Core/Inc Platform Drivers/SMU Storage \
-        App/smu_cal_seq.c App/smu_cal_seq.h \
-        App/smu_calibration.c App/smu_calibration.h \
-        App/smu_measurement.c App/smu_measurement.h \
+    find Core/Src Core/Inc Platform Drivers/SMU Storage App tests \
         -type f \( -name "*.c" -o -name "*.h" \) -print0 | xargs -0 clang-format -i
     echo -e "${GREEN}  [OK] Formatting rules applied successfully.${NC}"
 else
@@ -42,8 +39,7 @@ if command -v cppcheck &> /dev/null; then
              --error-exitcode=1 \
              --inline-suppr \
              --suppressions-list=.cppcheck_ignore \
-             Core/ Platform/ Drivers/SMU/ Storage/ \
-             App/smu_cal_seq.c App/smu_calibration.c App/smu_measurement.c
+             Core/ Platform/ Drivers/SMU/ Storage/ App/
     echo -e "${GREEN}  [OK] Static safety validation checks passed.${NC}"
 else
     echo -e "${YELLOW}  [WARN] cppcheck missing. Skipping static analysis.${NC}"

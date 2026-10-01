@@ -12,6 +12,10 @@ bool ads131m03_port_spi_dma_busy(void);
 void ads131m03_port_cs_assert(void);
 void ads131m03_port_cs_deassert(void);
 
+/* Gate DRDY -> ads131m03_dma_drdy_isr(). Enabling clears any stale DRDY edge.
+ * The port also routes SPI DMA complete/error to the driver ISRs. */
+void ads131m03_port_drdy_enable(bool enabled);
+
 /* Blocking bring-up services. Acquisition must be disabled while these run. */
 void ads131m03_port_reset(bool asserted);
 bool ads131m03_port_wait_ready(uint32_t timeout_ms);

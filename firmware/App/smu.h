@@ -1,12 +1,34 @@
 #ifndef SMU_H
 #define SMU_H
+#include "smu_measurement.h"
+#include "smu_range.h"
 #include "smu_types.h"
-void smu_init(void);
-void smu_tick_1khz(void);
+#include <stdbool.h>
+
+/*
+ * Top level of the SMU. main.c only calls smu_init() once after the CubeMX
+ * peripheral init and smu_process() from the main loop.
+ *
+ * Current scope: measurement only (no sourcing). Boots in 1.5 A / 15 V with
+ * current autorange enabled.
+ */
+
+/* Loads calibration, brings up the ADS131M03, selects the boot ranges and
+ * starts acquisition. False if the ADC bring-up failed. */
+bool smu_init(void);
+
+/* Foreground loop: ADC frames -> measurement -> autorange -> range switches. */
 void smu_process(void);
-smu_status_t smu_output_enable(void);
-void smu_output_disable(void);
-smu_status_t smu_set_mode(smu_force_mode_t mode);
-smu_status_t smu_request_range(smu_current_range_t range);
+
+void smu_get_measurement(smu_measurement_outputs_t* out);
 const smu_context_t* smu_get_context(void);
+
+/* Manual current range; disables autorange. */
+smu_status_t smu_set_current_range(smu_current_range_t range);
+void smu_set_autorange(bool enabled);
+smu_status_t smu_set_voltage_range(smu_voltage_range_t range);
+
+/* Tuning knobs (thresholds, persistence, discard counts). */
+smu_range_config_t* smu_range_config(void);
+
 #endif

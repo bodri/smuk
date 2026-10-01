@@ -19,3 +19,6 @@ void ads131m03_port_cs_assert(void) {
 void ads131m03_port_cs_deassert(void) {
     busy = false;
 }
+void ads131m03_port_drdy_enable(bool enabled) {
+    (void)enabled;
+}
