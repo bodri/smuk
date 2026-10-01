@@ -468,8 +468,9 @@ int main(void) {
         uint32_t now = HAL_GetTick();
 
         if (now != cal_last_tick) {
+            uint32_t elapsed_ms = now - cal_last_tick;
             cal_last_tick = now;
-            smu_cal_seq_tick_1ms(&cal_seq);
+            smu_cal_seq_tick_elapsed_ms(&cal_seq, elapsed_ms);
         }
 
         /* USER CODE END WHILE */
