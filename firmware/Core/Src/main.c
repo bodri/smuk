@@ -51,6 +51,9 @@ COM_InitTypeDef BspCOMInit;
 
 /* USER CODE BEGIN PV */
 
+const smu_context_t* smu_ctx;
+smu_measurement_outputs_t out;
+
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -101,6 +104,9 @@ int main(void) {
         Error_Handler();
     }
 
+    smu_ctx = smu_get_context();
+    smu_set_voltage_range(SMU_VRANGE_6V);
+
     /* USER CODE END 2 */
 
     /* Initialize led */
@@ -124,6 +130,7 @@ int main(void) {
 
     while (1) {
         smu_process();
+        smu_get_measurement(&out);
 
         /* USER CODE END WHILE */
 
