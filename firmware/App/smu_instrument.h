@@ -1,10 +1,10 @@
 #ifndef SMU_INSTRUMENT_H
 #define SMU_INSTRUMENT_H
-#include <stdbool.h>
-#include "smu_types.h"
+#include "smu_compliance.h"
 #include "smu_fault.h"
 #include "smu_range.h"
-#include "smu_compliance.h"
+#include "smu_types.h"
+#include <stdbool.h>
 
 typedef struct {
     smu_state_t state;
@@ -23,10 +23,9 @@ typedef struct {
     unsigned state_ms;
 } smu_instrument_t;
 
-void smu_instrument_init(smu_instrument_t *s);
-void smu_instrument_tick_1ms(smu_instrument_t *s, float abs_current_A,
-                             bool compliance_active);
-bool smu_instrument_output_enable(smu_instrument_t *s);
-void smu_instrument_output_disable(smu_instrument_t *s);
-bool smu_instrument_clear_fault(smu_instrument_t *s);
+void smu_instrument_init(smu_instrument_t* s);
+void smu_instrument_tick_1ms(smu_instrument_t* s, float abs_current_A, bool compliance_active);
+bool smu_instrument_output_enable(smu_instrument_t* s);
+void smu_instrument_output_disable(smu_instrument_t* s);
+bool smu_instrument_clear_fault(smu_instrument_t* s);
 #endif
