@@ -14,6 +14,10 @@ bool range_hw_gate_state_valid(smu_current_range_t expected);
 bool range_hw_gate_state_invalid(void);
 bool range_hw_current_plausible(smu_current_range_t expected);
 
+/* Voltage sense divider range (VRANGE). */
+void range_hw_select_voltage(smu_voltage_range_t range);
+smu_voltage_range_t range_hw_voltage_selected(void);
+
 /* Host-test controls; real STM32 port need not implement these publicly. */
 void range_hw_mock_set_gate_delay_ms(unsigned ms);
 void range_hw_mock_force_invalid(bool invalid);

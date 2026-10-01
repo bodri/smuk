@@ -6,73 +6,69 @@
  */
 
 #include "range_hw.h"
-#include <string.h>
+#include "range_hw_port.h"
 
-static bool gates[6];
-static smu_current_range_t mock_range_cmd = SMU_RANGE_NONE;
-static smu_current_range_t mock_range_fb = SMU_RANGE_NONE;
-static unsigned mock_gate_delay = 1u;
-static unsigned mock_gate_countdown = 0u;
-static bool mock_gate_invalid = false;
-static bool mock_current_implausible = false;
-
-void range_hw_all_off(void) {
-    memset(gates, 0, sizeof(gates));
+static bool valid_current_range(smu_current_range_t r) {
+    return r >= SMU_RANGE_1P5A && r <= SMU_RANGE_100UA;
 }
 
-// void range_hw_command(smu_current_range_t r, bool on) {
-//	if (r > SMU_RANGE_NONE && r <= SMU_RANGE_100UA)
-//		gates[r] = on;
-// }
-// bool range_hw_gate_is_on(smu_current_range_t r) {
-//	return (r > SMU_RANGE_NONE && r <= SMU_RANGE_100UA) ? gates[r] : false;
-// }
-// bool range_hw_verify_one_hot(smu_current_range_t expected) {
-//	int n = 0, last = 0;
-//	for (int i = 1; i <= 5; i++)
-//		if (gates[i]) {
-//			n++;
-//			last = i;
-//		}
-//	return expected == SMU_RANGE_NONE ?
-//			n == 0 : (n == 1 && last == (int) expected);
-// }
+static unsigned closed_gate_count(void) {
+    unsigned n = 0;
+    for (int r = SMU_RANGE_1P5A; r <= SMU_RANGE_100UA; r++)
+        if (range_hw_port_current_gate_is_on((smu_current_range_t)r))
+            n++;
+    return n;
+}
+
+void range_hw_all_off(void) {
+    for (int r = SMU_RANGE_1P5A; r <= SMU_RANGE_100UA; r++)
+        range_hw_port_current_gate((smu_current_range_t)r, false);
+}
+
+/* Make-before-break: close the new shunt first so the output current path
+ * never opens, then open every other shunt. SMU_RANGE_NONE opens all. */
+void range_hw_select(smu_current_range_t range) {
+    if (!valid_current_range(range)) {
+        range_hw_all_off();
+        return;
+    }
+    range_hw_port_current_gate(range, true);
+    for (int r = SMU_RANGE_1P5A; r <= SMU_RANGE_100UA; r++)
+        if (r != (int)range)
+            range_hw_port_current_gate((smu_current_range_t)r, false);
+}
+
+/* True only if exactly the expected gate is closed (or none for NONE). */
+bool range_hw_is_selected(smu_current_range_t range) {
+    unsigned n = closed_gate_count();
+    if (!valid_current_range(range))
+        return n == 0u;
+    return n == 1u && range_hw_port_current_gate_is_on(range);
+}
 
 void range_hw_begin_transition(smu_current_range_t old_range, smu_current_range_t new_range) {
     (void)old_range;
-    mock_range_cmd = new_range;
-    mock_gate_countdown = mock_gate_delay;
-    if (mock_gate_countdown == 0u)
-        mock_range_fb = new_range;
+    range_hw_select(new_range);
 }
 
 bool range_hw_gate_state_valid(smu_current_range_t expected) {
-    return !mock_gate_invalid && mock_range_fb == expected;
+    return range_hw_is_selected(expected);
 }
 
 bool range_hw_gate_state_invalid(void) {
-    return mock_gate_invalid;
+    return closed_gate_count() > 1u;
 }
 
+/* No gate-voltage readback on Rev-A yet; plausibility cannot be checked. */
 bool range_hw_current_plausible(smu_current_range_t expected) {
     (void)expected;
-    return !mock_current_implausible;
+    return true;
 }
 
-void range_hw_mock_set_gate_delay_ms(unsigned ms) {
-    mock_gate_delay = ms;
-}
-void range_hw_mock_force_invalid(bool v) {
-    mock_gate_invalid = v;
-}
-void range_hw_mock_force_implausible(bool v) {
-    mock_current_implausible = v;
+void range_hw_select_voltage(smu_voltage_range_t range) {
+    range_hw_port_voltage_6v(range == SMU_VRANGE_6V);
 }
 
-void range_hw_mock_tick_1ms(void) {
-    if (mock_gate_countdown) {
-        mock_gate_countdown--;
-        if (mock_gate_countdown == 0u)
-            mock_range_fb = mock_range_cmd;
-    }
+smu_voltage_range_t range_hw_voltage_selected(void) {
+    return range_hw_port_voltage_6v_is_on() ? SMU_VRANGE_6V : SMU_VRANGE_15V;
 }

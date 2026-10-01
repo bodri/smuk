@@ -5,8 +5,6 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-typedef enum { SMU_VRANGE_15V = 0, SMU_VRANGE_6V } smu_voltage_range_t;
-
 typedef struct {
     float gain;
     float offset;
