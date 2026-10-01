@@ -3,9 +3,7 @@
 
 #include <stdbool.h>
 
-typedef enum {
-	CALBUS_0V = 0, CALBUS_P1V5, CALBUS_P3V, CALBUS_N3V
-} calbus_sel_t;
+typedef enum { CALBUS_0V = 0, CALBUS_P1V5, CALBUS_P3V, CALBUS_N3V } calbus_sel_t;
 
 void cal_hw_select_bus(calbus_sel_t s);
 void cal_hw_voltage_relay(bool on);

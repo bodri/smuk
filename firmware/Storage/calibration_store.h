@@ -26,21 +26,17 @@ typedef struct {
     uint32_t crc32;
 } smu_cal_record_t;
 
-typedef enum {
-    SMU_CAL_LOAD_OK = 0,
-    SMU_CAL_LOAD_DEFAULTS,
-    SMU_CAL_LOAD_INVALID
-} smu_cal_load_result_t;
+typedef enum { SMU_CAL_LOAD_OK = 0, SMU_CAL_LOAD_DEFAULTS, SMU_CAL_LOAD_INVALID } smu_cal_load_result_t;
 
-void smu_cal_record_defaults(smu_cal_record_t *rec);
-void smu_cal_record_finalize(smu_cal_record_t *rec);
-bool smu_cal_record_validate(const smu_cal_record_t *rec);
-uint32_t smu_cal_crc32(const void *data, uint32_t len);
+void smu_cal_record_defaults(smu_cal_record_t* rec);
+void smu_cal_record_finalize(smu_cal_record_t* rec);
+bool smu_cal_record_validate(const smu_cal_record_t* rec);
+uint32_t smu_cal_crc32(const void* data, uint32_t len);
 
 // Storage backend
 void smu_cal_store_init(void);
-smu_cal_load_result_t smu_cal_store_load(smu_cal_record_t *out);
-bool smu_cal_store_save(const smu_cal_record_t *rec);
+smu_cal_load_result_t smu_cal_store_load(smu_cal_record_t* out);
+bool smu_cal_store_save(const smu_cal_record_t* rec);
 void smu_cal_store_invalidate_all(void);
 
 #endif

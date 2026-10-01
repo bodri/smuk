@@ -1,16 +1,15 @@
 #ifndef RANGE_HW_H
 #define RANGE_HW_H
 
-#include <stdbool.h>
 #include "smu_types.h"
+#include <stdbool.h>
 
 void range_hw_all_off(void);
 void range_hw_select(smu_current_range_t range);
 bool range_hw_is_selected(smu_current_range_t range);
 
 /* Phase-4 transaction/readback interface. */
-void range_hw_begin_transition(smu_current_range_t old_range,
-                               smu_current_range_t new_range);
+void range_hw_begin_transition(smu_current_range_t old_range, smu_current_range_t new_range);
 bool range_hw_gate_state_valid(smu_current_range_t expected);
 bool range_hw_gate_state_invalid(void);
 bool range_hw_current_plausible(smu_current_range_t expected);

@@ -96,7 +96,7 @@ Install these dependencies and make them available on `PATH`:
 3. **Python 3** for the Flash footprint check
 4. A **host C compiler** (`cc`, or set `CC`) for host regression tests
 
-`clang-format` and `cppcheck` are optional. When installed, the build script automatically formats files under `Core/Src` and `Core/Inc` and runs static analysis on `Core`. These steps are skipped with a warning if the tools are unavailable.
+`clang-format` and `cppcheck` are optional. When installed, the build script automatically formats C source and header files under `Core/Src`, `Core/Inc`, `Platform`, `Drivers/SMU`, and `Storage`, and runs static analysis on `Core`, `Platform`, `Drivers/SMU`, and `Storage`. These steps are skipped with a warning if the tools are unavailable.
 
 The supplied flashing and debugging helpers currently require **STM32CubeIDE installed under `/Applications` on macOS**, including its STM32CubeProgrammer and ST-LINK GDB server bundles.
 

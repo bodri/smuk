@@ -25,8 +25,8 @@ echo -e "${YELLOW}🔍 Running Code Integrity Analysis...${NC}"
 # 1. Formatting & Auto-Correction (clang-format Option 1)
 if command -v clang-format &> /dev/null; then
     echo "  -> Auto-formatting layout to match code guidelines..."
-    # Changed from --dry-run to -i to directly fix files instead of throwing errors
-    find Core/Src Core/Inc -name "*.c" -o -name "*.h" | xargs clang-format -i
+    find Core/Src Core/Inc Platform Drivers/SMU Storage -type f \
+        \( -name "*.c" -o -name "*.h" \) -print0 | xargs -0 clang-format -i
     echo -e "${GREEN}  [OK] Formatting rules applied successfully.${NC}"
 else
     echo -e "${YELLOW}  [WARN] clang-format missing. Skipping styling validation.${NC}"
@@ -39,7 +39,7 @@ if command -v cppcheck &> /dev/null; then
              --error-exitcode=1 \
              --inline-suppr \
              --suppressions-list=.cppcheck_ignore \
-             Core/
+             Core/ Platform/ Drivers/SMU/ Storage/
     echo -e "${GREEN}  [OK] Static safety validation checks passed.${NC}"
 else
     echo -e "${YELLOW}  [WARN] cppcheck missing. Skipping static analysis.${NC}"
