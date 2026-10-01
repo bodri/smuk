@@ -2,6 +2,33 @@
 
 You are operating inside the embedded software workspace. Code generated here executes on an **STM32H5 High-Performance Microcontroller** (ARM Cortex-M33 architecture).
 
+The ADS131M03 SPI/GPDMA acquisition, measurement conversion, CALBUS calibration, voltage calibration, and Flash calibration storage are currently working and must remain functional. Do not look at the code in the App directory it does not work yet. Do not modify it.
+
+First inspect the complete project and propose a refactoring plan before editing anything.
+
+## Desired architecture
+
+- main.c: CubeMX/HAL initialization and minimal main loop only
+- ADS131M03 driver: ADC communication/acquisition only
+- smu_measurement: raw ADC → physical measurements, filtering, calibration application
+- smu_ranges: sole owner of voltage/current range GPIO control and synchronization with measurement range state
+- smu_calibration: calibration coefficients/fitting/application
+- smu_cal_seq: safe calibration acquisition sequencing
+- calibration_store: Flash persistence only
+- I really like to make the implementation HAL agnostic. For example, you can see ads131m03_bringup: all code which needs to call the HAL goes into the ads131m03_bringup_port. And the implemetation of the port goes into the ads131m03_bringup_port_hal file under the Platform directory. In this way, the HAL implementation can be swapped out without modifying the rest of the code. Please follow this pattern when adding new HAL agnostic code.
+
+## Important constraints
+
+- Do not change working ADS131M03 register setup, SPI/DMA timing, ISR behavior, CRC handling, or frame format.
+- Do not change measurement equations or calibration coefficients.
+- Do not change Flash layout or calibration record format.
+- Do not change GPIO polarities based on assumptions.
+- Avoid dynamic allocation.
+- Keep ISR work minimal.
+- Make the refactor in small buildable steps.
+- After each step, build the project and fix compilation errors before continuing.
+- Preserve existing debugger/test hooks initially; remove obsolete bring-up code only after identifying it.
+
 ## ⚠️ CRITICAL RULES (Code Destruction Prevention)
 - **STM32CubeMX Guardrails:** This project uses auto-generated initializers. 
   - **ONLY** insert application code inside explicit `/* USER CODE BEGIN <Name> */` and `/* USER CODE END <Name> */` comment lines.

@@ -27,8 +27,7 @@
 /* USER CODE BEGIN Includes */
 
 #include "ads131m03.h"
-#include "ads131m03_bringup.h"
-#include "ads131m03_stream_dma.h"
+#include "ads131m03_port.h"
 #include "calibration_store.h"
 #include "smu_cal_seq.h"
 #include "smu_calibration.h"
@@ -535,7 +534,7 @@ void SystemClock_Config(void) {
 
 /* USER CODE BEGIN 4 */
 
-void ads131m03_bu_port_log(const char* text) {
+void ads131m03_port_log(const char* text) {
     (void)text;
 }
 
