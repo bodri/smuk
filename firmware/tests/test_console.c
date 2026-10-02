@@ -154,6 +154,7 @@ int main(void) {
     assert(strstr(output, "stale=1 age_ms=25") && strstr(output, "crc=3"));
     send("STATUS?\n");
     assert(strstr(output, "fresh=0 settled=0 precision_ready=0 stale=1 age_ms=25"));
+    assert(strstr(output, "WATCHDOG active=0 reset=0"));
     ctx.acquisition_stale = false;
     send("IMPEDANCE 10M\n");
     assert(ctx.input_10m_requested && ctx.input_10m_active);
@@ -297,4 +298,17 @@ int main(void) {
     smu_console_frame(&clipped, ctx.range, ctx.vrange);
     assert(strstr(output, "range/state changed"));
     puts("serial console: all tests passed");
+}
+
+/* These suites exercise the instrument without starting physical IWDG. */
+bool smu_watchdog_port_was_reset(void) {
+    return false;
+}
+
+bool smu_watchdog_port_start(void) {
+    return true;
+}
+
+bool smu_watchdog_port_refresh(void) {
+    return true;
 }

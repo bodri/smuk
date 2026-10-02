@@ -4,6 +4,7 @@
 #include "smu_console_port.h"
 #include "smu_log.h"
 #include "smu_port.h"
+#include "smu_watchdog.h"
 #include <ctype.h>
 #include <math.h>
 #include <stdarg.h>
@@ -214,6 +215,7 @@ static void command(char* text) {
               c->measurement_valid, (unsigned long)c->frame_count, capturing, points);
         reply("QUALITY fresh=%u settled=%u precision_ready=%u stale=%u age_ms=%lu I_clip=%u V_clip=%u BUS_clip=%u I_overload=%u V_overload=%u\r\n", c->measurement_fresh, c->measurement_settled,
               c->precision_ready, c->acquisition_stale, (unsigned long)c->measurement_age_ms, c->current_clipped, c->voltage_clipped, c->calbus_clipped, c->current_overload, c->voltage_overload);
+        reply("WATCHDOG active=%u reset=%u\r\n", smu_watchdog_active(), smu_watchdog_was_reset());
     } else if (!strcmp(text, "ACQ?") && !*arg) {
         const smu_context_t* c = smu_get_context();
         reply("ACQ stale=%u age_ms=%lu gaps=%lu pauses=%lu crc=%lu spi=%lu busy=%lu overruns=%lu log_dropped=%lu\r\n", c->acquisition_stale, (unsigned long)c->measurement_age_ms,

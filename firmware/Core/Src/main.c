@@ -26,8 +26,10 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 
+#include "safety_hw.h"
 #include "smu.h"
 #include "smu_console.h"
+#include "smu_watchdog.h"
 
 /* USER CODE END Includes */
 
@@ -126,6 +128,10 @@ int main(void) {
         Error_Handler();
     }
 
+    if (!smu_watchdog_start()) {
+        Error_Handler();
+    }
+
     /* Calibration load, ADS131M03 bring-up, boot ranges and acquisition. */
     if (!smu_init()) {
         Error_Handler();
@@ -141,6 +147,9 @@ int main(void) {
         smu_process();
         smu_console_process();
         smu_get_measurement(&out);
+        if (!smu_watchdog_service(smu_ctx->state, safety_hw_pa_requested(), smu_ctx->input_10m_active)) {
+            Error_Handler();
+        }
 
         /* USER CODE END WHILE */
 
@@ -167,7 +176,8 @@ void SystemClock_Config(void) {
     /** Initializes the RCC Oscillators according to the specified parameters
      * in the RCC_OscInitTypeDef structure.
      */
-    RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_CSI;
+    RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_LSI | RCC_OSCILLATORTYPE_CSI;
+    RCC_OscInitStruct.LSIState = RCC_LSI_ON;
     RCC_OscInitStruct.CSIState = RCC_CSI_ON;
     RCC_OscInitStruct.CSICalibrationValue = RCC_CSICALIBRATION_DEFAULT;
     RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
@@ -213,7 +223,8 @@ void SystemClock_Config(void) {
  */
 void Error_Handler(void) {
     /* USER CODE BEGIN Error_Handler_Debug */
-    /* User can add his own implementation to report the HAL error return state */
+    /* Leave the output request off and let an already-started IWDG reset. */
+    safety_hw_disable_pa();
     __disable_irq();
     while (1) {
     }

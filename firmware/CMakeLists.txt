@@ -11,6 +11,7 @@ set(CMAKE_EXECUTABLE_SUFFIX ".elf")
 add_compile_definitions(
     DEBUG
     STM32H503xx
+    HAL_IWDG_MODULE_ENABLED=
     USE_HAL_DRIVER
     USE_NUCLEO_64
 )

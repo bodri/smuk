@@ -162,3 +162,8 @@ This starts the ST-LINK GDB server on port **61234**. Connect a GDB client confi
 This project adheres to **Semantic Versioning (v2.0.0)**. Due to the monorepo nature, git tags tie firmware releases directly to specific physical board iterations:
 * **`v1.0.0-HW1`**: Initial hardware board spin layout.
 * **`v1.0.1-FW`**: Firmware patch fixing a register timing error specifically for the HW1 board revision.
+
+The measurement firmware now uses a nominal 2-second independent watchdog.
+Foreground processing owns refresh; handled faults stay latched for diagnosis.
+See the [watchdog and CubeMX setup instructions](firmware/serial_console.md#independent-watchdog)
+for regeneration settings, reset reporting, and bench checks.

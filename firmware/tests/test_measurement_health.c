@@ -426,3 +426,16 @@ int main(void) {
     test_health_wrap_and_windows();
     puts("Measurement quality and acquisition health tests passed.");
 }
+
+/* These suites exercise the instrument without starting physical IWDG. */
+bool smu_watchdog_port_was_reset(void) {
+    return false;
+}
+
+bool smu_watchdog_port_start(void) {
+    return true;
+}
+
+bool smu_watchdog_port_refresh(void) {
+    return true;
+}

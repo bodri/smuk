@@ -8,6 +8,7 @@
 #include "smu_console.h"
 #include "smu_log.h"
 #include "smu_port.h"
+#include "smu_watchdog.h"
 #include <string.h>
 
 static smu_context_t g;
@@ -196,6 +197,10 @@ static bool calibration_save_begin(void) {
         }
     }
     discard_queued_frames();
+    if (!smu_watchdog_before_flash()) {
+        fault(SMU_FAULT_WATCHDOG);
+        return false;
+    }
     return true;
 }
 

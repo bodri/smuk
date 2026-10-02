@@ -298,3 +298,77 @@ The console command state initializes after calibration loading without resettin
 the transport, preserving queued startup logs. No commands execute during bring-up.
 
 Host validation: `sh tests/run_log.sh` and `sh tests/run_console.sh`.
+
+## Independent watchdog
+
+The STM32 IWDG starts after console transport initialization, before instrument
+bring-up. The Platform port owns the HAL handle and initialization; no generated
+`MX_IWDG_Init()` call is needed. The matching STM32CubeH5 V1.7.0 IWDG HAL source
+and header are included and enabled by a CMake compile definition.
+
+Prescaler 64 and reload 999 give `64 * (999 + 1) / 32000 = 2.000 s` nominal.
+Using the datasheet LSI range of 29.4–33.6 kHz gives approximately 1.90–2.18 s.
+There is no refresh window and no early-warning interrupt. Debug freeze is
+configured before start: halting the core suspends the watchdog; a DEBUG build
+still uses the watchdog when running normally or without a debugger.
+
+Only the foreground loop services it, at most once per 100 ms, after instrument,
+console, and measurement processing return. Interrupt handlers never refresh it.
+A responsive latched fault remains diagnosable while the PA request and input
+load are off. Invalid runtime states, unsafe fault state, or refresh failure
+stop servicing. `Error_Handler()` disables the software PA request and waits;
+after watchdog start, this and HardFault hangs eventually reset the MCU.
+An error before watchdog start is not covered. PA control currently remains a
+software stub; physical PA shutdown and reset-safe enable circuitry are required
+when the output stage is implemented. Watchdog recovery never restores a PA request.
+
+The reset flag is captured before RCC reset flags are cleared. Startup logs
+`SMU IWDG started nominal_ms=2000 reset=0|1`; `STATUS?` adds
+`WATCHDOG active=1 reset=0|1`. A watchdog reset boots the regular safe measurement
+startup with saved calibration and default ranges/autorange/integration settings.
+
+After DMA is quiesced, an authorized calibration save refreshes once immediately
+before writing Flash. No refresh occurs inside Flash erase/program waits or DMA
+waits. The current DMA wait is bounded to 10 ms; SPI bring-up transfers and DRDY
+waits each have 100 ms limits. The Flash HAL has a 1 s timeout per operation and
+returns on failure. These are software bounds, not hardware timing measurements;
+verify the complete save duration remains comfortably below the minimum watchdog
+timeout on the board. A genuinely stuck save resets rather than feeds indefinitely;
+existing alternating calibration slots and readback validation are preserved.
+
+### CubeMX setup
+
+1. Open `smuk.ioc`; select **System Core → IWDG** and enable it (Activated).
+2. Set **Prescaler = 64**, **Reload = 999**, **Window = 4095** (disabled), and
+   **Early Wakeup Interrupt = disabled / 0**. Leave IWDG NVIC interrupt disabled.
+3. Under RCC, use the internal **LSI** oscillator. Do not alter the existing
+   HSI/PLL/system clock configuration; HAL IWDG start also enables LSI itself.
+4. Under **Project Manager → Advanced Settings → Generated Function Calls**,
+   select **Do Not Generate Function Call** for `MX_IWDG_Init`. Keep HAL selected.
+   The Platform port initializes the watchdog at the required startup point;
+   an automatic generated call would start it earlier and initialize it twice.
+5. Keep **Keep User Code when re-generating** enabled. Keep the existing
+   software-start option-byte configuration; do not enable hardware start.
+6. Generate code and inspect the diff. Confirm the HAL IWDG source/header are
+   retained and no automatic `MX_IWDG_Init()` call appears in `main()`. The application
+   `smu_watchdog_start()` and foreground service calls remain in USER CODE blocks.
+   Build with the existing CMake workflow.
+
+The `.ioc` has not been changed automatically; apply these settings before your
+next regeneration. The current CMake firmware already enables IWDG without that step.
+CubeMX UI wording can vary by version. References:
+[STM32CubeMX advanced settings](https://dev.st.com/stm32cube-docs/stm32cubemx/6.18.1/en/docs/markup/CubeMX_UserManual/chapters/04_4_stm32cubemx_user_interface.html),
+[STM32H503 datasheet, LSI characteristics](https://www.st.com/resource/en/datasheet/stm32h503eb.pdf).
+
+### Validation
+
+`sh tests/run_watchdog.sh` checks service timing/tick wrap, handled fault states,
+initialization/refresh failures, and Flash-save policy. Console and measurement
+health suites check integration with their existing paths.
+
+On the board, verify normal operation and calibration saves do not reset; halt
+in the debugger for more than 2 s and confirm debug freeze; then run freely with
+a deliberate foreground infinite loop or debugger-injected HardFault and verify
+reset after approximately 2 s and `WATCHDOG reset=1` afterward. Use a temporary
+bench-only fault injection, never a normal serial command. Verify PA enable and
+range/impedance reset behavior electrically before adding a working output stage.
