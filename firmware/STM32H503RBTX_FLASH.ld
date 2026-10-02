@@ -39,7 +39,9 @@ ENTRY(Reset_Handler)
 _estack = ORIGIN(RAM) + LENGTH(RAM); /* end of "RAM" Ram type memory */
 
 _Min_Heap_Size = 0x200; /* required amount of heap */
-_Min_Stack_Size = 0x400; /* required amount of stack */
+/* MSPLIM enforces this reservation. Console formatting and nested IRQs need
+ * more than the CubeMX default 1 KiB stack. */
+_Min_Stack_Size = 0x1000; /* reserve 4 KiB for stack */
 
 _sstack = _estack - _Min_Stack_Size;
 

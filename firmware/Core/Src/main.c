@@ -27,6 +27,7 @@
 /* USER CODE BEGIN Includes */
 
 #include "smu.h"
+#include "smu_console.h"
 
 /* USER CODE END Includes */
 
@@ -128,8 +129,13 @@ int main(void) {
     /* Infinite loop */
     /* USER CODE BEGIN WHILE */
 
+    if (!smu_console_init()) {
+        Error_Handler();
+    }
+
     while (1) {
         smu_process();
+        smu_console_process();
         smu_get_measurement(&out);
 
         /* USER CODE END WHILE */

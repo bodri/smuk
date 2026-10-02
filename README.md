@@ -126,6 +126,16 @@ Connect the board through an ST-LINK debugger, build the firmware, then run from
 
 The helper programs `build/smuk.elf` using STM32CubeProgrammer over SWD in under-reset mode, verifies the image, and resets the target. The equivalent Zed task is **STM32H5: Flash Firmware**.
 
+### Serial Communication and Manual Calibration
+
+The ST-LINK USB connection provides a USART3 Virtual COM Port at **115200 baud,
+8N1, no flow control**. The firmware console supports measurement/raw queries,
+range selection, and manual calibration from externally applied references.
+Start with `HELP` or `PING`.
+
+See [Serial console and manual calibration](firmware/serial_console.md) for the
+command list, terminal setup, calibration capture/fit/save workflow, and host tests.
+
 ### Debug Server
 
 From `firmware`, run:

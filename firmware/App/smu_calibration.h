@@ -3,7 +3,12 @@
 #include "calibration_store.h"
 #include "smu_measurement.h"
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
+
+/* Pure least-squares fit of 2..8 nominal/reference pairs. Requires finite
+ * data and a positive finite gain; leaves output untouched on failure. */
+bool smu_calibration_fit_linear(const float* nominal, const float* reference, size_t count, smu_linear_cal_t* out);
 
 void smu_calibration_init(void);
 const smu_cal_record_t* smu_calibration_get(void);

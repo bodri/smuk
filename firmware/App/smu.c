@@ -4,6 +4,7 @@
 #include "calibration_store.h"
 #include "smu_cal_debug.h"
 #include "smu_calibration.h"
+#include "smu_console.h"
 #include "smu_port.h"
 #include <string.h>
 
@@ -86,6 +87,7 @@ static void process_frames(void) {
         if (!smu_measurement_process_frame(&mf))
             continue;
         smu_measurement_get_outputs(&smu_outputs);
+        smu_console_frame(&f, ranges.active, ranges.vactive);
 
         if (g.state == SMU_STATE_NORMAL)
             smu_range_autorange_frame(&ranges, f.ch0, smu_outputs.fast.current_A);
