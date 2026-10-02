@@ -230,9 +230,11 @@ static void put_cmd(uint8_t f[FRAME_BYTES], uint16_t c) {
     f[1] = (uint8_t)c;
     f[2] = 0;
 }
+
 static uint16_t word16(const uint8_t f[FRAME_BYTES]) {
     return (uint16_t)(((uint16_t)f[0] << 8) | f[1]);
 }
+
 static bool xfer_cmd_response(uint16_t cmd, uint16_t* response, uint8_t last[15]) {
     uint8_t tx[FRAME_BYTES], rx[FRAME_BYTES];
     put_cmd(tx, cmd);
@@ -248,6 +250,7 @@ static bool xfer_cmd_response(uint16_t cmd, uint16_t* response, uint8_t last[15]
         *response = word16(rx);
     return true;
 }
+
 static void logreg(const char* name, uint16_t v) {
     char b[48];
     (void)snprintf(b, sizeof(b), "ADS %-5s = 0x%04X\r\n", name, (unsigned)v);

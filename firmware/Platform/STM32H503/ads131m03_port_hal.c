@@ -57,6 +57,7 @@ void ads131m03_port_cs_deassert(void) {
 void ads131m03_port_reset(bool asserted) {
     HAL_GPIO_WritePin(GPIOC, GPIO_PIN_9, asserted ? GPIO_PIN_RESET : GPIO_PIN_SET);
 }
+
 bool ads131m03_port_wait_ready(uint32_t timeout_ms) {
     /* After reset, TI specifies low->high DRDY as SPI-ready. Polling is intentional for bring-up. */
     uint32_t t0 = HAL_GetTick();
@@ -69,12 +70,14 @@ bool ads131m03_port_wait_ready(uint32_t timeout_ms) {
     }
     return false;
 }
+
 bool ads131m03_port_transfer(const uint8_t* tx, uint8_t* rx, size_t n) {
     HAL_GPIO_WritePin(GPIOB, GPIO_PIN_8, GPIO_PIN_RESET);
     HAL_StatusTypeDef st = HAL_SPI_TransmitReceive(&hspi1, (uint8_t*)tx, rx, (uint16_t)n, 100);
     HAL_GPIO_WritePin(GPIOB, GPIO_PIN_8, GPIO_PIN_SET);
     return st == HAL_OK;
 }
+
 void ads131m03_port_delay_ms(uint32_t ms) {
     HAL_Delay(ms);
 }

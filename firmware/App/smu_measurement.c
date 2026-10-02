@@ -18,11 +18,13 @@ typedef struct {
     uint16_t pidx, pcount;
     smu_measurement_outputs_t out;
 } meas_ctx_t;
+
 static meas_ctx_t g;
 
 static float apply_cal(float x, smu_linear_cal_t c) {
     return x * c.gain + c.offset;
 }
+
 static int cal_i_index(smu_current_range_t r) {
     return (r >= SMU_RANGE_1P5A && r <= SMU_RANGE_100UA) ? (int)r - 1 : -1;
 }
@@ -38,12 +40,14 @@ float smu_current_from_adc(float v, smu_current_range_t r) {
         return 0.0f;
     return v / (5.0f * rsh[r]);
 }
+
 float smu_voltage_from_adc(float v, smu_voltage_range_t r) {
     /* Actual measured divider scales from traced Rev-A topology. */
     const float k15 = 0.1993594876f / 3.0f; /* R28/(R27+R28), then /3 */
     const float k6 = (0.1993594876f * 2.5f) / 3.0f;
     return v / ((r == SMU_VRANGE_6V) ? k6 : k15);
 }
+
 float smu_calbus_from_adc(float v) {
     return v * 3.0f;
 }
@@ -85,6 +89,7 @@ void smu_measurement_init(const smu_measurement_cal_t* cal, const smu_filter_con
     if (g.cfg.precision_n > PREC_MAX)
         g.cfg.precision_n = PREC_MAX;
 }
+
 void smu_measurement_set_calibration(const smu_measurement_cal_t* cal) {
     if (!cal)
         return;
@@ -107,18 +112,23 @@ void smu_measurement_reset_filters(void) {
 void smu_measurement_set_current_range(smu_current_range_t r) {
     g.irange = r;
 }
+
 void smu_measurement_set_voltage_range(smu_voltage_range_t r) {
     g.vrange = r;
 }
+
 void smu_measurement_set_valid(bool v) {
     g.valid = v;
 }
+
 void smu_measurement_set_compliance(bool v) {
     g.compliance = v;
 }
+
 void smu_measurement_set_range_transition(bool v) {
     g.transition = v;
 }
+
 void smu_measurement_set_overload(bool v) {
     g.overload = v;
 }
@@ -166,6 +176,7 @@ bool smu_measurement_process_frame(const ads131m03_frame_t* f) {
     g.out.sample_count++;
     return true;
 }
+
 void smu_measurement_get_outputs(smu_measurement_outputs_t* out) {
     if (out)
         *out = g.out;

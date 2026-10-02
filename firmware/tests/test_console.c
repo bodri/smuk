@@ -14,15 +14,18 @@ static bool lost, save_fail;
 static unsigned saves;
 static smu_context_t ctx;
 static smu_cal_record_t active;
+
 bool smu_console_port_init(void) {
     return true;
 }
+
 bool smu_console_port_read(uint8_t* byte) {
     if (!input[read_at])
         return false;
     *byte = (uint8_t)input[read_at++];
     return true;
 }
+
 bool smu_console_port_write(const char* text, size_t length) {
     assert(write_at + length < sizeof(output));
     memcpy(output + write_at, text, length);
@@ -30,37 +33,46 @@ bool smu_console_port_write(const char* text, size_t length) {
     output[write_at] = 0;
     return true;
 }
+
 bool smu_console_port_rx_lost(void) {
     bool result = lost;
     lost = false;
     return result;
 }
+
 uint32_t smu_port_millis(void) {
     return now;
 }
+
 const smu_context_t* smu_get_context(void) {
     return &ctx;
 }
+
 void smu_get_measurement(smu_measurement_outputs_t* out) {
     smu_measurement_get_outputs(out);
 }
+
 void smu_set_autorange(bool value) {
     ctx.autorange = value;
 }
+
 smu_status_t smu_set_current_range(smu_current_range_t range) {
     ctx.range = range;
     ctx.autorange = false;
     smu_measurement_set_current_range(range);
     return SMU_OK;
 }
+
 smu_status_t smu_set_voltage_range(smu_voltage_range_t range) {
     ctx.vrange = range;
     smu_measurement_set_voltage_range(range);
     return SMU_OK;
 }
+
 const smu_cal_record_t* smu_calibration_get(void) {
     return &active;
 }
+
 bool smu_calibration_commit(const smu_cal_record_t* record) {
     if (save_fail)
         return false;
@@ -69,6 +81,7 @@ bool smu_calibration_commit(const smu_cal_record_t* record) {
     ++saves;
     return true;
 }
+
 static void send(const char* text) {
     snprintf(input, sizeof(input), "%s", text);
     read_at = write_at = 0;
@@ -76,10 +89,12 @@ static void send(const char* text) {
     while (input[read_at])
         smu_console_process();
 }
+
 static void sample(int32_t code) {
     ads131m03_frame_t f = {.ch = {code, code, code}, .crc_ok = true};
     smu_measurement_process_frame(&f);
 }
+
 static void point(const char* reference, int32_t code) {
     char text[100];
     snprintf(text, sizeof(text), "CAL:CAPTURE %s\r\n", reference);
@@ -91,6 +106,7 @@ static void point(const char* reference, int32_t code) {
     smu_console_process();
     assert(strstr(output, "OK POINT"));
 }
+
 int main(void) {
     ctx = (smu_context_t){.state = SMU_STATE_NORMAL, .range = SMU_RANGE_10MA, .vrange = SMU_VRANGE_6V, .measurement_valid = true, .autorange = true};
     smu_measurement_init(NULL, NULL);

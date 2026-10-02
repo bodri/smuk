@@ -13,12 +13,15 @@ void range_hw_port_current_gate(smu_current_range_t r, bool on) {
     if (r >= SMU_RANGE_1P5A && r <= SMU_RANGE_100UA)
         gate[r] = on;
 }
+
 bool range_hw_port_current_gate_is_on(smu_current_range_t r) {
     return r >= SMU_RANGE_1P5A && r <= SMU_RANGE_100UA && gate[r];
 }
+
 void range_hw_port_voltage_6v(bool on) {
     v6 = on;
 }
+
 bool range_hw_port_voltage_6v_is_on(void) {
     return v6;
 }

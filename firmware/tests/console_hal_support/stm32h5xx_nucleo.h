@@ -1,9 +1,11 @@
 #ifndef CONSOLE_TEST_HAL_H
 #define CONSOLE_TEST_HAL_H
 #include <stdint.h>
+
 typedef struct {
     unsigned RxState;
 } UART_HandleTypeDef;
+
 extern UART_HandleTypeDef hcom_uart[1];
 #define COM1 0
 #define USART3_IRQn 39

@@ -9,16 +9,20 @@
 
 /* RAM persistence stub: exercise the actual calibration application path. */
 static smu_cal_record_t stored;
+
 void smu_cal_record_finalize(smu_cal_record_t* record) {
     (void)record;
 }
+
 bool smu_cal_record_validate(const smu_cal_record_t* record) {
     return record != NULL;
 }
+
 bool smu_cal_store_save(const smu_cal_record_t* record) {
     stored = *record;
     return true;
 }
+
 smu_cal_load_result_t smu_cal_store_load(smu_cal_record_t* out) {
     *out = stored;
     return SMU_CAL_LOAD_OK;
@@ -27,21 +31,27 @@ smu_cal_load_result_t smu_cal_store_load(smu_cal_record_t* out) {
 static bool voltage_relay, current_relay;
 static calbus_sel_t bus;
 static unsigned disable_count, off_count;
+
 void safety_hw_disable_pa(void) {
     ++disable_count;
 }
+
 void range_hw_all_off(void) {
     ++off_count;
 }
+
 void cal_hw_select_bus(calbus_sel_t value) {
     bus = value;
 }
+
 void cal_hw_voltage_relay(bool on) {
     voltage_relay = on;
 }
+
 void cal_hw_current_inject_relay(bool on) {
     current_relay = on;
 }
+
 bool cal_hw_pa_interlock_ok(void) {
     return true;
 }
@@ -53,12 +63,14 @@ static void start(smu_cal_seq_t* s, smu_cal_target_t target) {
     while (s->state != CAL_SEQ_DISCARD)
         smu_cal_seq_tick_1ms(s);
 }
+
 static void assert_fault(const smu_cal_seq_t* s) {
     assert(s->state == CAL_SEQ_FAULT && s->fault && !s->result_ready);
     assert(!s->measurement_valid && !s->servo_allowed);
     assert(!voltage_relay && !current_relay && bus == CALBUS_0V);
     assert(disable_count && off_count);
 }
+
 static void test_timeout(void) {
     smu_cal_seq_t s;
     start(&s, CAL_TARGET_VOLTAGE);
@@ -94,9 +106,11 @@ static void test_timeout(void) {
     smu_cal_seq_tick_1ms(&s);
     assert_fault(&s);
 }
+
 static void close_to(float actual, float expected) {
     assert(fabsf(actual - expected) < 0.0001f);
 }
+
 static void test_measurement(void) {
     smu_filter_config_t cfg = {.fast_alpha = 0.5f, .precision_n = 2};
     smu_measurement_init(NULL, &cfg);
@@ -141,6 +155,7 @@ static void test_measurement(void) {
     assert(out.sample_count == 5 && out.fast.range_transition && !out.fast.valid);
     assert(out.fast.compliance);
 }
+
 int main(void) {
     test_timeout();
     test_measurement();

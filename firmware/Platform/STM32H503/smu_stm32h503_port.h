@@ -3,7 +3,9 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+
 typedef enum { SMU_SUP_P18, SMU_SUP_N18, SMU_SUP_P9, SMU_SUP_N9, SMU_SUP_3V3, SMU_SUP_RANGE_P9, SMU_SUP_PA_TEMP, SMU_SUP_AFE_TEMP, SMU_SUP_COUNT } smu_sup_ch_t;
+
 bool smu_stm32_platform_init(void);
 uint32_t smu_stm32_millis(void);
 bool smu_ads_spi_dma_start(const uint8_t*, uint8_t*, size_t);

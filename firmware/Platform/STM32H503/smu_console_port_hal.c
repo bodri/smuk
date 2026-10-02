@@ -20,9 +20,11 @@ bool smu_console_port_init(void) {
     initialized = true;
     return HAL_UART_Receive_IT(&hcom_uart[COM1], &rx_byte, 1) == HAL_OK;
 }
+
 void USART3_IRQHandler(void) {
     HAL_UART_IRQHandler(&hcom_uart[COM1]);
 }
+
 void HAL_UART_RxCpltCallback(UART_HandleTypeDef* uart) {
     if (uart != &hcom_uart[COM1] || !initialized)
         return;
@@ -36,6 +38,7 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef* uart) {
     }
     (void)HAL_UART_Receive_IT(uart, &rx_byte, 1);
 }
+
 void HAL_UART_ErrorCallback(UART_HandleTypeDef* uart) {
     if (uart != &hcom_uart[COM1] || !initialized)
         return;
@@ -43,6 +46,7 @@ void HAL_UART_ErrorCallback(UART_HandleTypeDef* uart) {
     if (uart->RxState == HAL_UART_STATE_READY)
         (void)HAL_UART_Receive_IT(uart, &rx_byte, 1);
 }
+
 bool smu_console_port_rx_lost(void) {
     uint32_t mask = __get_PRIMASK();
     __disable_irq();
@@ -53,6 +57,7 @@ bool smu_console_port_rx_lost(void) {
     __set_PRIMASK(mask);
     return result;
 }
+
 bool smu_console_port_read(uint8_t* byte) {
     (void)smu_console_port_write("", 0);
     if (lost || tail == head)
@@ -63,12 +68,14 @@ bool smu_console_port_read(uint8_t* byte) {
     tail = (tail + 1u) % RX_SIZE;
     return true;
 }
+
 void HAL_UART_TxCpltCallback(UART_HandleTypeDef* uart) {
     if (uart == &hcom_uart[COM1]) {
         tx_tail = (tx_tail + transmitting) % TX_SIZE;
         transmitting = 0;
     }
 }
+
 bool smu_console_port_write(const char* text, size_t length) {
     /* All writes are foreground-only; the ISR only releases completed bytes. */
     uint32_t mask = __get_PRIMASK();

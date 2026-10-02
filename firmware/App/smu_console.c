@@ -17,7 +17,9 @@ static size_t used;
 static bool discard_line, output_lost;
 static smu_cal_record_t staged;
 static bool dirty;
+
 static enum { TARGET_NONE, TARGET_V, TARGET_I, TARGET_BUS } target;
+
 static smu_current_range_t current_range;
 static smu_voltage_range_t voltage_range;
 static float x[POINTS], y[POINTS];
@@ -38,6 +40,7 @@ static void reply(const char* format, ...) {
     if (n < 0 || (size_t)n >= sizeof(text) || !smu_console_port_write(text, (size_t)n))
         output_lost = true;
 }
+
 /* Fixed decimal formatting avoids linking newlib's large printf float backend. */
 static const char* number(float value, char text[32]) {
     if (!isfinite(value) || fabsf(value) > 1000000.0f) {
@@ -50,13 +53,16 @@ static const char* number(float value, char text[32]) {
     (void)snprintf(text, 32, "%s%lu.%09lu", negative ? "-" : "", (unsigned long)(magnitude / 1000000000u), (unsigned long)(magnitude % 1000000000u));
     return text;
 }
+
 static const char* irange_name(smu_current_range_t r) {
     static const char* names[] = {"NONE", "1.5A", "100MA", "10MA", "1MA", "100UA"};
     return r >= SMU_RANGE_NONE && r <= SMU_RANGE_100UA ? names[r] : "INVALID";
 }
+
 static const char* vrange_name(smu_voltage_range_t r) {
     return r == SMU_VRANGE_6V ? "6V" : "15V";
 }
+
 static bool stable(void) {
     const smu_context_t* ctx = smu_get_context();
     smu_measurement_outputs_t out;
@@ -64,10 +70,12 @@ static bool stable(void) {
     return ctx->state == SMU_STATE_NORMAL && ctx->measurement_valid && !ctx->autorange && out.fast.valid && !out.fast.overload && !out.fast.range_transition && out.fast.range == ctx->range &&
            out.fast.vrange == ctx->vrange;
 }
+
 static bool same_range(void) {
     const smu_context_t* ctx = smu_get_context();
     return ctx->range == current_range && ctx->vrange == voltage_range;
 }
+
 static void show_cal(void) {
     char a[32], b[32];
     const smu_cal_record_t* active = smu_calibration_get();
@@ -78,6 +86,7 @@ static void show_cal(void) {
         reply("V %s gain=%s offset_V=%s\r\n", vrange_name((smu_voltage_range_t)i), number(staged.measurement.voltage[i].gain, a), number(staged.measurement.voltage[i].offset, b));
     reply("BUS gain=%s offset_V=%s\r\n", number(staged.measurement.calbus.gain, a), number(staged.measurement.calbus.offset, b));
 }
+
 static void fit(void) {
     if (target == TARGET_NONE || capturing || points < 2 || !stable() || !same_range()) {
         reply("ERR fit requires >=2 points and unchanged fixed ranges\r\n");
@@ -96,6 +105,7 @@ static void fit(void) {
     for (unsigned i = 0; i < points; ++i)
         reply("RESIDUAL %u %s\r\n", i, number(y[i] - (coefficient.gain * x[i] + coefficient.offset), a));
 }
+
 /* Small bounded decimal parser; accepts optional scientific notation without
  * pulling the full libc strtof implementation into the 112 KiB image. */
 static bool parse_reference(const char* text, float* value) {
@@ -264,6 +274,7 @@ static void command(char* text) {
     } else
         reply("ERR unknown command; HELP\r\n");
 }
+
 bool smu_console_init(void) {
     staged = *smu_calibration_get();
     used = points = acquired = 0;
@@ -274,6 +285,7 @@ bool smu_console_init(void) {
     reply("SMUK serial ready 115200 8N1. HELP for commands.\r\n");
     return true;
 }
+
 void smu_console_frame(const ads131m03_dma_frame_t* f, smu_current_range_t irange, smu_voltage_range_t vrange) {
     if (!capturing)
         return;
@@ -299,6 +311,7 @@ void smu_console_frame(const ads131m03_dma_frame_t* f, smu_current_range_t irang
         ready = true;
     }
 }
+
 void smu_console_process(void) {
     if (output_lost && smu_console_port_write("ERR TX overflow; retry query\r\n", 29))
         output_lost = false;

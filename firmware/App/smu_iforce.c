@@ -17,6 +17,7 @@ float smu_current_range_fs_A(smu_current_range_t r) {
         return 0.0f;
     }
 }
+
 float smu_current_range_shunt_ohm(smu_current_range_t r) {
     switch (r) {
     case SMU_RANGE_1P5A:
@@ -33,6 +34,7 @@ float smu_current_range_shunt_ohm(smu_current_range_t r) {
         return 0.0f;
     }
 }
+
 bool smu_iforce_from_current(float i, smu_current_range_t r, float* v) {
     float rs = smu_current_range_shunt_ohm(r);
     if (!v || rs <= 0.0f)
@@ -40,6 +42,7 @@ bool smu_iforce_from_current(float i, smu_current_range_t r, float* v) {
     *v = i * rs * 15.0f;
     return (*v >= -3.00001f && *v <= 3.00001f);
 }
+
 bool smu_current_from_iforce(float v, smu_current_range_t r, float* i) {
     float rs = smu_current_range_shunt_ohm(r);
     if (!i || rs <= 0.0f)
@@ -47,6 +50,7 @@ bool smu_current_from_iforce(float v, smu_current_range_t r, float* i) {
     *i = v / (rs * 15.0f);
     return true;
 }
+
 bool smu_current_fits_range(float i, smu_current_range_t r, float frac) {
     float fs = smu_current_range_fs_A(r);
     return fs > 0.0f && frac > 0.0f && fabsf(i) <= fs * frac;
