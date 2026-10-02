@@ -105,6 +105,9 @@ static void test_timeout(void) {
     s.acquire_required = 0;
     smu_cal_seq_tick_1ms(&s);
     assert_fault(&s);
+    start(&s, CAL_TARGET_VOLTAGE);
+    smu_cal_seq_abort(&s);
+    assert_fault(&s);
 }
 
 static void close_to(float actual, float expected) {

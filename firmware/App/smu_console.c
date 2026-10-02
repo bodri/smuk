@@ -32,6 +32,8 @@ static float reference;
 static bool ready;
 static bool echo;
 
+static void reply(const char* format, ...) __attribute__((format(printf, 1, 2)));
+
 static void reply(const char* format, ...) {
     char text[384];
     va_list args;
@@ -166,7 +168,7 @@ static void command(char* text) {
     if (!arg)
         arg = "";
     if (!strcmp(text, "HELP") && !*arg) {
-        reply("STATUS? MEAS? RAW? CAL:SHOW? ECHO ON|OFF; IMPEDANCE 10M|HIGHZ\r\nRANGE:I 1.5A|100MA|10MA|1MA|100UA; RANGE:V 15V|6V; AUTORANGE[:I|:V] ON|OFF\r\nCAL:BEGIN V|I|BUS; CAL:CAPTURE "
+        reply("STATUS? ACQ? MEAS? RAW? CAL:SHOW? ECHO ON|OFF; IMPEDANCE 10M|HIGHZ\r\nRANGE:I 1.5A|100MA|10MA|1MA|100UA; RANGE:V 15V|6V; AUTORANGE[:I|:V] ON|OFF\r\nCAL:BEGIN V|I|BUS; CAL:CAPTURE "
               "<reference in V/A>; CAL:FIT; "
               "CAL:POINTS?\r\nCAL:SAVE; CAL:RESET; CAL:ABORT; PING\r\n");
     } else if (!strcmp(text, "PING") && !*arg)
@@ -179,6 +181,12 @@ static void command(char* text) {
         reply("STATUS state=%u faults=%lu I=%s V=%s autorange=%u autorange_v=%u impedance_requested=%s impedance=%s valid=%u frames=%lu capture=%u points=%u\r\n", c->state, (unsigned long)c->faults,
               irange_name(c->range), vrange_name(c->vrange), c->current_autorange, c->voltage_autorange, c->input_10m_requested ? "10M" : "HIGHZ", c->input_10m_active ? "10M" : "HIGHZ",
               c->measurement_valid, (unsigned long)c->frame_count, capturing, points);
+        reply("QUALITY fresh=%u settled=%u precision_ready=%u stale=%u age_ms=%lu I_clip=%u V_clip=%u BUS_clip=%u I_overload=%u V_overload=%u\r\n", c->measurement_fresh, c->measurement_settled,
+              c->precision_ready, c->acquisition_stale, (unsigned long)c->measurement_age_ms, c->current_clipped, c->voltage_clipped, c->calbus_clipped, c->current_overload, c->voltage_overload);
+    } else if (!strcmp(text, "ACQ?") && !*arg) {
+        const smu_context_t* c = smu_get_context();
+        reply("ACQ stale=%u age_ms=%lu gaps=%lu crc=%lu spi=%lu busy=%lu overruns=%lu\r\n", c->acquisition_stale, (unsigned long)c->measurement_age_ms, (unsigned long)c->acquisition_gap_count,
+              (unsigned long)c->adc_crc_errors, (unsigned long)c->adc_spi_errors, (unsigned long)c->adc_busy_count, (unsigned long)c->adc_overruns);
     } else if ((!strcmp(text, "MEAS?") || !strcmp(text, "RAW?")) && !*arg) {
         smu_measurement_outputs_t out;
         smu_get_measurement(&out);
@@ -189,6 +197,8 @@ static void command(char* text) {
         else
             reply("MEAS I_A=%s V_V=%s BUS_V=%s I=%s V=%s valid=%u samples=%lu\r\n", number(m->current_A, a), number(m->voltage_V, b), number(m->calbus_V, c), irange_name(m->range),
                   vrange_name(m->vrange), m->valid, (unsigned long)out.sample_count);
+        reply("QUALITY fresh=%u settled=%u precision_ready=%u I_clip=%u V_clip=%u BUS_clip=%u I_overload=%u V_overload=%u\r\n", m->fresh, m->settled, out.precision_ready, m->current_clipped,
+              m->voltage_clipped, m->calbus_clipped, m->current_overload, m->voltage_overload);
     } else if (!strcmp(text, "CAL:ABORT") && !*arg) {
         capturing = ready = false;
         target = TARGET_NONE;
@@ -307,6 +317,13 @@ bool smu_console_init(void) {
         return false;
     reply("SMUK serial ready 115200 8N1. HELP for commands.\r\n");
     return true;
+}
+
+void smu_console_acquisition_gap(void) {
+    if (capturing || ready) {
+        capturing = ready = false;
+        reply("ERR acquisition gap; capture discarded\r\n");
+    }
 }
 
 void smu_console_frame(const ads131m03_dma_frame_t* f, smu_current_range_t irange, smu_voltage_range_t vrange) {

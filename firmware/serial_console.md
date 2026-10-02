@@ -34,7 +34,8 @@ wait for the save response and fresh valid measurements afterward.
 | `PING` | `PONG` |
 | `HELP` | Command summary |
 | `ECHO ON` / `ECHO OFF` | Device input echo; default off |
-| `STATUS?` | State, faults, current/voltage ranges, autorange, validity, frame count, capture status |
+| `STATUS?` | State, faults, ranges, autorange, validity, frame count, capture status, then a `QUALITY` line |
+| `ACQ?` | Acquisition age/staleness, gap count, CRC/SPI errors, busy events and overruns |
 | `MEAS?` | Precision filtered measurements in amperes/volts, ranges and validity |
 | `RAW?` | Latest raw CH0/CH1/CH2 codes; these are not averaged |
 | `RANGE:I 1.5A` / `100MA` / `10MA` / `1MA` / `100UA` | Request fixed current range and disable autorange |
@@ -55,6 +56,47 @@ Manual captures **do not select CALBUS or operate calibration relays**. Apply
 references using the normal measurement input path, or an externally arranged
 CALBUS connection. The entered reference must be independently measured, not
 the nominal CALBUS label or the SMU's already calibrated display.
+
+## Measurement quality and acquisition health
+
+`STATUS?`, `MEAS?`, and `RAW?` include a `QUALITY` line. `fresh` means a sample
+is available and acquisition is current; `settled` means that the measurement
+pipeline is outside a settling transition. `valid=1` requires measurement enabled,
+fresh and settled data, and neither current nor voltage overload. Faults and
+transitions immediately invalidate cached readings. Numerical values remain
+available for diagnostics when invalid; do not use those values for control.
+
+`I_clip` and `V_clip` report raw ADC magnitude at or above 8,220,000 codes
+(about 98% full scale), regardless of autorange. `I_overload` additionally
+includes the existing nominal-current overload threshold; `V_overload` reports
+voltage ADC clipping. CALBUS clipping is reported independently as `BUS_clip`
+and does not invalidate otherwise usable I/V measurements. Precision CALBUS
+remains flagged until any clipped sample has left its averaging window.
+Clipped/overloaded I/V samples are excluded from filter history.
+
+`precision_ready=1` additionally requires the complete configured precision
+window. `valid` retains the existing partial-window behavior; future precision
+control must require both flags. Averaging lengths and measurement equations
+are unchanged.
+
+The foreground health monitor uses the existing ADC counters without changing
+SPI/DMA configuration or ISR behavior. Defaults are:
+
+- No clean acquisition progress for 20 ms: invalidate readings and reset filters
+  and autorange persistence. New clean frames recover automatically.
+- CRC/SPI errors, DMA-busy events, ring overruns, or a foreground monitoring pause
+  of at least 20 ms: discard queued frames of uncertain continuity and reset
+  measurement history. Active manual captures are discarded; an active debugger
+  calibration sequence aborts with a calibration fault.
+- No clean acquisition progress for 1 second, or ten transport errors within a
+  fixed 1-second monitoring window: latch an ADC fault, request PA disable, and
+  disconnect the 10 MΩ load. Reboot is currently required to clear the fault.
+
+`ACQ?` exposes `age_ms`, `stale`, `gaps`, `crc`, `spi`, `busy`, and `overruns`.
+Age is measured from foreground observation of clean ADC progress, not a
+hardware timestamp for each frame. The monitor conservatively drops queued
+frames after a long foreground pause. Thresholds can be tuned through
+`smu_acquisition_config()`; keep all configured limits positive.
 
 ## Input impedance
 
@@ -152,6 +194,7 @@ one batch. The console does not generate or switch those voltages.
 sh firmware/tests/run_console.sh
 sh firmware/tests/run_autorange.sh
 sh firmware/tests/run_calibration_state.sh
+sh firmware/tests/run_measurement_health.sh
 ```
 
 Host tests validate command parsing, staged fitting, save failures, capture

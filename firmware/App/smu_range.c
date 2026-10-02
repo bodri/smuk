@@ -136,6 +136,11 @@ bool smu_range_request_input_10m(smu_range_manager_t* rm, bool enabled) {
         return false;
     rm->input_10m_requested = enabled;
     rm->impedance_pending = enabled != rm->input_10m_active;
+    if (rm->impedance_pending) {
+        rm->measurement_valid = false;
+        rm->servo_allowed = false;
+        smu_measurement_set_range_transition(true);
+    }
     return true;
 }
 
@@ -171,6 +176,9 @@ bool smu_range_request(smu_range_manager_t* rm, smu_current_range_t target, smu_
     rm->requested = target;
     rm->reason = reason;
     rm->tx_state = SMU_RANGE_TX_PENDING;
+    rm->measurement_valid = false;
+    rm->servo_allowed = false;
+    smu_measurement_set_range_transition(true);
     return true;
 }
 
@@ -185,6 +193,9 @@ bool smu_range_request_voltage(smu_range_manager_t* rm, smu_voltage_range_t targ
     }
     rm->vrequested = target;
     rm->vpending = true;
+    rm->measurement_valid = false;
+    rm->servo_allowed = false;
+    smu_measurement_set_range_transition(true);
     return true;
 }
 
@@ -232,6 +243,9 @@ void smu_range_reassert(smu_range_manager_t* rm) {
     if (!rm->vpending)
         rm->vrequested = rm->vactive;
     rm->vpending = true;
+    rm->measurement_valid = false;
+    rm->servo_allowed = false;
+    smu_measurement_set_range_transition(true);
 }
 
 bool smu_range_accept_frame(smu_range_manager_t* rm) {
@@ -248,6 +262,17 @@ bool smu_range_accept_frame(smu_range_manager_t* rm) {
     return rm->tx_state != SMU_RANGE_TX_FAULT;
 }
 
+void smu_range_acquisition_gap(smu_range_manager_t* rm) {
+    reset_current_autorange(rm);
+    reset_voltage_autorange(rm);
+}
+
+void smu_range_update_current_overload(smu_range_manager_t* rm, int32_t code) {
+    const float abs_A = fabsf(smu_current_from_adc(smu_ads_code_to_volts(code), rm->active));
+    rm->overload = range_is_valid(rm->active) && (code >= ADC_CLIP_CODE || code <= -ADC_CLIP_CODE || abs_A > rm->cfg.current_overload_fraction * smu_current_range_fs_A(rm->active));
+    smu_measurement_set_overload(rm->overload);
+}
+
 void smu_range_current_autorange_frame(smu_range_manager_t* rm, int32_t code, float filtered_A) {
     if (!range_is_valid(rm->active))
         return;
@@ -257,8 +282,7 @@ void smu_range_current_autorange_frame(smu_range_manager_t* rm, int32_t code, fl
     const bool clipped = code >= ADC_CLIP_CODE || code <= -ADC_CLIP_CODE;
     const bool saturated = clipped || abs_A > rm->cfg.current_overload_fraction * fs;
 
-    rm->overload = saturated;
-    smu_measurement_set_overload(saturated);
+    smu_range_update_current_overload(rm, code);
 
     if (!rm->current_autorange_enabled || rm->tx_state != SMU_RANGE_TX_IDLE)
         return;

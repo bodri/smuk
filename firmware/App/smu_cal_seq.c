@@ -15,6 +15,10 @@ static void enter_fault(smu_cal_seq_t* s) {
     s->state = CAL_SEQ_FAULT;
 }
 
+void smu_cal_seq_abort(smu_cal_seq_t* s) {
+    enter_fault(s);
+}
+
 void smu_cal_seq_init(smu_cal_seq_t* s) {
     *s = (smu_cal_seq_t){0};
     s->acquisition_timeout_ms = SMU_CAL_SEQ_DEFAULT_TIMEOUT_MS;

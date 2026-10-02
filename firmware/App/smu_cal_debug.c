@@ -42,6 +42,14 @@ static void start_capture(int point, calbus_sel_t bus) {
     }
 }
 
+void smu_cal_debug_acquisition_gap(void) {
+    if (smu_cal_debug_active()) {
+        smu_cal_seq_abort(&cal_seq);
+        vcal_fit_ready = false;
+        vcal_test_fault = true;
+    }
+}
+
 void smu_cal_debug_init(void) {
     smu_cal_seq_init(&cal_seq);
 }

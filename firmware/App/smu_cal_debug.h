@@ -9,6 +9,7 @@
  * Set test_vcal_capture_gnd / _1v5 / _3v0, then test_vcal_commit, from the
  * debugger. Owned and driven by smu.c.
  */
+void smu_cal_debug_acquisition_gap(void);
 void smu_cal_debug_init(void);
 void smu_cal_debug_frame(const ads131m03_dma_frame_t* f);
 void smu_cal_debug_process(uint32_t elapsed_ms);

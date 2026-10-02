@@ -92,6 +92,9 @@ bool smu_range_accept_frame(smu_range_manager_t* rm);
 
 /* Autorange input for an accepted frame: raw CH0 code (fast up-ranging and
  * overload) and the filtered current (down-ranging). */
+void smu_range_update_current_overload(smu_range_manager_t* rm, int32_t current_code);
+/* Reset persistence after acquisition discontinuities without changing requests. */
+void smu_range_acquisition_gap(smu_range_manager_t* rm);
 void smu_range_current_autorange_frame(smu_range_manager_t* rm, int32_t current_code, float filtered_current_A);
 
 /* CH1 clipping overrides confirmation; voltage inputs are calibrated and

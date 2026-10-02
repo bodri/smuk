@@ -134,6 +134,14 @@ int main(void) {
     assert(strstr(output, "serial ready"));
     send("ping\r\n");
     assert(strstr(output, "PONG"));
+    ctx.acquisition_stale = true;
+    ctx.measurement_age_ms = 25;
+    ctx.adc_crc_errors = 3;
+    send("ACQ?\n");
+    assert(strstr(output, "stale=1 age_ms=25") && strstr(output, "crc=3"));
+    send("STATUS?\n");
+    assert(strstr(output, "fresh=0 settled=0 precision_ready=0 stale=1 age_ms=25"));
+    ctx.acquisition_stale = false;
     send("IMPEDANCE 10M\n");
     assert(ctx.input_10m_requested && ctx.input_10m_active);
     send("STATUS?\n");
@@ -196,6 +204,10 @@ int main(void) {
     assert(strstr(output, "busy") && !ctx.voltage_autorange);
     send("IMPEDANCE 10M\n");
     assert(strstr(output, "busy") && !ctx.input_10m_active);
+    smu_console_acquisition_gap();
+    assert(strstr(output, "acquisition gap"));
+    send("CAL:CAPTURE 1E-5\n");
+    assert(strstr(output, "acquiring"));
     now += 2000;
     smu_console_process();
     assert(strstr(output, "timeout"));

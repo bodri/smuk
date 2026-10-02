@@ -4,6 +4,7 @@
 #include "smu_types.h"
 bool smu_console_init(void);
 void smu_console_process(void);
+void smu_console_acquisition_gap(void);
 /* Foreground only, once per accepted, settled measurement frame. */
 void smu_console_frame(const ads131m03_dma_frame_t* frame, smu_current_range_t irange, smu_voltage_range_t vrange);
 #endif

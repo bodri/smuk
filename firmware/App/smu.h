@@ -1,5 +1,6 @@
 #ifndef SMU_H
 #define SMU_H
+#include "smu_acquisition.h"
 #include "smu_measurement.h"
 #include "smu_range.h"
 #include "smu_types.h"
@@ -33,6 +34,9 @@ smu_status_t smu_set_voltage_range(smu_voltage_range_t range);
 
 /* Select differential input loading; rejects 10M while PA requested. */
 smu_status_t smu_set_input_10m(bool enabled);
+
+/* Foreground only; default stale 20 ms, stopped fault 1 s, 10 errors/1 s. */
+smu_acquisition_config_t* smu_acquisition_config(void);
 
 /* Tuning knobs (thresholds, persistence, discard counts). */
 smu_range_config_t* smu_range_config(void);

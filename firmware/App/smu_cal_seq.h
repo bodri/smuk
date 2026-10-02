@@ -42,6 +42,7 @@ typedef struct {
     bool result_ready;
 } smu_cal_seq_t;
 
+void smu_cal_seq_abort(smu_cal_seq_t* s);
 void smu_cal_seq_init(smu_cal_seq_t* s);
 bool smu_cal_seq_start(smu_cal_seq_t* s, smu_cal_target_t target, calbus_sel_t bus);
 void smu_cal_seq_tick_1ms(smu_cal_seq_t* s);

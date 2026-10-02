@@ -41,6 +41,9 @@ typedef struct {
     smu_current_range_t range;
     smu_voltage_range_t vrange;
     bool valid, compliance, overload, range_transition;
+    bool fresh, settled;
+    bool current_clipped, voltage_clipped, calbus_clipped;
+    bool current_overload, voltage_overload;
 } smu_measurement_t;
 
 typedef struct {
@@ -50,6 +53,11 @@ typedef struct {
     uint32_t faults;
     uint32_t frame_count;
     uint32_t range_switch_count;
+    uint32_t measurement_age_ms, acquisition_gap_count;
+    uint32_t adc_crc_errors, adc_spi_errors, adc_busy_count, adc_overruns;
+    bool acquisition_stale, measurement_fresh, measurement_settled, precision_ready;
+    bool current_clipped, voltage_clipped, calbus_clipped;
+    bool current_overload, voltage_overload;
     bool input_10m_requested, input_10m_active;
     bool current_autorange, voltage_autorange, measurement_valid, overload;
 } smu_context_t;

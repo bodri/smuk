@@ -25,6 +25,7 @@ typedef struct {
     smu_measurement_t fast;
     smu_measurement_t precision;
     uint32_t sample_count;
+    bool precision_ready; /* full configured window of valid I/V samples */
 } smu_measurement_outputs_t;
 
 void smu_measurement_init(const smu_measurement_cal_t* cal, const smu_filter_config_t* cfg);
@@ -37,10 +38,15 @@ void smu_measurement_reset_filters(void);
 void smu_measurement_set_current_range(smu_current_range_t range);
 void smu_measurement_set_voltage_range(smu_voltage_range_t range);
 void smu_measurement_set_valid(bool valid);
+/* Foreground acquisition monitor invalidates immediately on stale/gapped data. */
+void smu_measurement_set_fresh(bool fresh);
 void smu_measurement_set_compliance(bool active);
 void smu_measurement_set_range_transition(bool active);
 void smu_measurement_set_overload(bool active);
 bool smu_measurement_process_frame(const ads131m03_frame_t* frame);
+/* valid requires enabled, fresh, settled and no I/V overload. CALBUS quality
+ * is independent. Precision validity keeps existing partial-window behavior;
+ * control consumers must additionally require precision_ready. */
 void smu_measurement_get_outputs(smu_measurement_outputs_t* out);
 
 /* Pure conversion helpers, useful for host tests. PGA=1, internal nominal 1.2 V ref. */
