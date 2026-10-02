@@ -67,8 +67,8 @@ static bool stable(void) {
     const smu_context_t* ctx = smu_get_context();
     smu_measurement_outputs_t out;
     smu_get_measurement(&out);
-    return ctx->state == SMU_STATE_NORMAL && ctx->measurement_valid && !ctx->autorange && out.fast.valid && !out.fast.overload && !out.fast.range_transition && out.fast.range == ctx->range &&
-           out.fast.vrange == ctx->vrange;
+    return ctx->state == SMU_STATE_NORMAL && ctx->measurement_valid && !ctx->current_autorange && !ctx->voltage_autorange && out.fast.valid && !out.fast.overload && !out.fast.range_transition &&
+           out.fast.range == ctx->range && out.fast.vrange == ctx->vrange;
 }
 
 static bool same_range(void) {
@@ -165,7 +165,7 @@ static void command(char* text) {
     if (!arg)
         arg = "";
     if (!strcmp(text, "HELP") && !*arg) {
-        reply("STATUS? MEAS? RAW? CAL:SHOW? ECHO ON|OFF\r\nRANGE:I 1.5A|100MA|10MA|1MA|100UA; RANGE:V 15V|6V; AUTORANGE ON|OFF\r\nCAL:BEGIN V|I|BUS; CAL:CAPTURE <reference in V/A>; CAL:FIT; "
+        reply("STATUS? MEAS? RAW? CAL:SHOW? ECHO ON|OFF\r\nRANGE:I 1.5A|100MA|10MA|1MA|100UA; RANGE:V 15V|6V; AUTORANGE[:I|:V] ON|OFF\r\nCAL:BEGIN V|I|BUS; CAL:CAPTURE <reference in V/A>; CAL:FIT; "
               "CAL:POINTS?\r\nCAL:SAVE; CAL:RESET; CAL:ABORT; PING\r\n");
     } else if (!strcmp(text, "PING") && !*arg)
         reply("PONG\r\n");
@@ -174,8 +174,8 @@ static void command(char* text) {
         reply("OK\r\n");
     } else if (!strcmp(text, "STATUS?") && !*arg) {
         const smu_context_t* c = smu_get_context();
-        reply("STATUS state=%u faults=%lu I=%s V=%s autorange=%u valid=%u frames=%lu capture=%u points=%u\r\n", c->state, (unsigned long)c->faults, irange_name(c->range), vrange_name(c->vrange),
-              c->autorange, c->measurement_valid, (unsigned long)c->frame_count, capturing, points);
+        reply("STATUS state=%u faults=%lu I=%s V=%s autorange=%u autorange_v=%u valid=%u frames=%lu capture=%u points=%u\r\n", c->state, (unsigned long)c->faults, irange_name(c->range),
+              vrange_name(c->vrange), c->current_autorange, c->voltage_autorange, c->measurement_valid, (unsigned long)c->frame_count, capturing, points);
     } else if ((!strcmp(text, "MEAS?") || !strcmp(text, "RAW?")) && !*arg) {
         smu_measurement_outputs_t out;
         smu_get_measurement(&out);
@@ -219,7 +219,7 @@ static void command(char* text) {
             reply("ERR flash save failed\r\n");
     } else if (!strcmp(text, "CAL:BEGIN")) {
         if (capturing || !stable() || (strcmp(arg, "V") && strcmp(arg, "I") && strcmp(arg, "BUS"))) {
-            reply("ERR select settled fixed ranges with AUTORANGE OFF; target V|I|BUS\r\n");
+            reply("ERR select settled fixed ranges with both autoranges OFF; target V|I|BUS\r\n");
             return;
         }
         target = !strcmp(arg, "V") ? TARGET_V : !strcmp(arg, "I") ? TARGET_I : TARGET_BUS;
@@ -241,16 +241,19 @@ static void command(char* text) {
             started = smu_port_millis();
             reply("OK acquiring 256 samples\r\n");
         }
-    } else if (!strcmp(text, "RANGE:I") || !strcmp(text, "RANGE:V") || !strcmp(text, "AUTORANGE")) {
+    } else if (!strcmp(text, "RANGE:I") || !strcmp(text, "RANGE:V") || !strcmp(text, "AUTORANGE") || !strcmp(text, "AUTORANGE:I") || !strcmp(text, "AUTORANGE:V")) {
         if (capturing) {
             reply("ERR capture busy\r\n");
             return;
         }
-        if (!strcmp(text, "AUTORANGE")) {
+        if (!strcmp(text, "AUTORANGE") || !strcmp(text, "AUTORANGE:I") || !strcmp(text, "AUTORANGE:V")) {
             if (strcmp(arg, "ON") && strcmp(arg, "OFF"))
                 reply("ERR ON|OFF\r\n");
             else {
-                smu_set_autorange(!strcmp(arg, "ON"));
+                if (!strcmp(text, "AUTORANGE:V"))
+                    smu_set_voltage_autorange(!strcmp(arg, "ON"));
+                else
+                    smu_set_current_autorange(!strcmp(arg, "ON"));
                 target = TARGET_NONE;
                 points = 0;
                 reply("OK\r\n");

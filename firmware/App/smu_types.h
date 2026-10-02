@@ -50,6 +50,6 @@ typedef struct {
     uint32_t faults;
     uint32_t frame_count;
     uint32_t range_switch_count;
-    bool autorange, measurement_valid, overload;
+    bool current_autorange, voltage_autorange, measurement_valid, overload;
 } smu_context_t;
 #endif

@@ -52,19 +52,24 @@ void smu_get_measurement(smu_measurement_outputs_t* out) {
     smu_measurement_get_outputs(out);
 }
 
-void smu_set_autorange(bool value) {
-    ctx.autorange = value;
+void smu_set_current_autorange(bool value) {
+    ctx.current_autorange = value;
+}
+
+void smu_set_voltage_autorange(bool value) {
+    ctx.voltage_autorange = value;
 }
 
 smu_status_t smu_set_current_range(smu_current_range_t range) {
     ctx.range = range;
-    ctx.autorange = false;
+    ctx.current_autorange = false;
     smu_measurement_set_current_range(range);
     return SMU_OK;
 }
 
 smu_status_t smu_set_voltage_range(smu_voltage_range_t range) {
     ctx.vrange = range;
+    ctx.voltage_autorange = false;
     smu_measurement_set_voltage_range(range);
     return SMU_OK;
 }
@@ -108,7 +113,7 @@ static void point(const char* reference, int32_t code) {
 }
 
 int main(void) {
-    ctx = (smu_context_t){.state = SMU_STATE_NORMAL, .range = SMU_RANGE_10MA, .vrange = SMU_VRANGE_6V, .measurement_valid = true, .autorange = true};
+    ctx = (smu_context_t){.state = SMU_STATE_NORMAL, .range = SMU_RANGE_10MA, .vrange = SMU_VRANGE_6V, .measurement_valid = true, .current_autorange = true};
     smu_measurement_init(NULL, NULL);
     smu_measurement_set_voltage_range(ctx.vrange);
     smu_measurement_set_valid(true);
@@ -123,10 +128,22 @@ int main(void) {
     assert(strstr(output, "serial ready"));
     send("ping\r\n");
     assert(strstr(output, "PONG"));
+    send("AUTORANGE:V ON\n");
+    assert(ctx.voltage_autorange && ctx.current_autorange);
+    send("STATUS?\n");
+    assert(strstr(output, "autorange_v=1"));
+    send("AUTORANGE:I OFF\n");
+    assert(!ctx.current_autorange && ctx.voltage_autorange);
+    send("CAL:BEGIN V\n");
+    assert(strstr(output, "ERR"));
+    send("RANGE:V 6V\n");
+    assert(!ctx.voltage_autorange);
+    send("AUTORANGE:I ON\n");
+    assert(ctx.current_autorange);
     send("CAL:BEGIN V\n");
     assert(strstr(output, "ERR"));
     send("AUTORANGE OFF\n");
-    assert(!ctx.autorange);
+    assert(!ctx.current_autorange);
     send("CAL:BEGIN V\n");
     assert(strstr(output, "OK manual"));
     send("CAL:CAPTURE NAN\n");
@@ -157,6 +174,8 @@ int main(void) {
     assert(strstr(output, "acquiring"));
     send("RANGE:I 1MA\n");
     assert(strstr(output, "busy"));
+    send("AUTORANGE:V ON\n");
+    assert(strstr(output, "busy") && !ctx.voltage_autorange);
     now += 2000;
     smu_console_process();
     assert(strstr(output, "timeout"));

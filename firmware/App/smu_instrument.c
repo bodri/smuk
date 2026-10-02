@@ -54,7 +54,7 @@ static void monitor_fault_inputs(smu_instrument_t* s) {
 }
 
 void smu_instrument_tick_1ms(smu_instrument_t* s, float abs_current_A, bool compliance_active) {
-    /* Autorange is fed per ADC frame via smu_range_autorange_frame(). */
+    /* Autorange is fed per ADC frame via smu_range_current_autorange_frame(). */
     (void)abs_current_A;
     s->state_ms++;
     monitor_fault_inputs(s);

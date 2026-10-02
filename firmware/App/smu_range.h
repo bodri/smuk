@@ -10,7 +10,7 @@
  * measurement range state in step, and is driven by the ADC frame stream:
  *
  *   for each popped frame (in arrival order):
- *       if (smu_range_accept_frame(rm)) { process; smu_range_autorange_frame(...); }
+ *       if (smu_range_accept_frame(rm)) { process; smu_range_current_autorange_frame(...); }
  *   smu_range_tick_ms(rm, elapsed);   // applies queued switches
  *
  * Switches are only applied from tick, i.e. after the DMA ring was drained, so
@@ -30,13 +30,16 @@ typedef enum { SMU_RANGE_ERR_NONE = 0, SMU_RANGE_ERR_BUSY, SMU_RANGE_ERR_BAD_REQ
 
 /* Fractions are of the active range's full scale. Prototype values; tune on the bench. */
 typedef struct {
-    float up_fraction;                        /* |I| above this up-ranges */
-    float overload_fraction;                  /* |I| above this is treated as saturated */
-    float fit_fraction;                       /* a range fits |I| below this; picks switch targets */
-    uint16_t up_confirm_frames;               /* consecutive frames above up_fraction before up-ranging */
-    uint32_t down_persist_ms;                 /* a smaller range must fit continuously this long */
-    uint16_t discard_frames[SMU_RANGE_SLOTS]; /* frames dropped after switching into a current range */
-    uint16_t vrange_discard_frames;           /* frames dropped after a voltage range switch */
+    float current_up_fraction;                        /* |I| above this up-ranges */
+    float current_overload_fraction;                  /* |I| above this is treated as saturated */
+    float current_fit_fraction;                       /* a range fits |I| below this; picks switch targets */
+    uint16_t current_up_confirm_frames;               /* consecutive frames above current_up_fraction before up-ranging */
+    uint32_t current_down_persist_ms;                 /* a smaller range must fit continuously this long */
+    uint16_t current_discard_frames[SMU_RANGE_SLOTS]; /* frames dropped after switching into a current range */
+    float voltage_up_V, voltage_down_V;
+    uint16_t voltage_up_confirm_frames;
+    uint32_t voltage_down_persist_ms;
+    uint16_t vrange_discard_frames; /* frames dropped after a voltage range switch */
 } smu_range_config_t;
 
 typedef struct {
@@ -50,11 +53,15 @@ typedef struct {
     smu_voltage_range_t vrequested;
     bool vpending;
     uint16_t discard_left;
-    uint16_t up_count;
-    uint32_t down_ms;
-    bool down_candidate;
-    float last_filtered_A;
-    bool autorange_enabled;
+    uint16_t current_up_count;
+    uint32_t current_down_ms;
+    bool current_down_candidate;
+    float current_last_filtered_A;
+    bool current_autorange_enabled;
+    bool voltage_autorange_enabled;
+    uint16_t voltage_up_count;
+    uint32_t voltage_down_ms;
+    bool voltage_down_candidate, voltage_frame_seen;
     bool overload;
     bool measurement_valid;
     bool servo_allowed;
@@ -64,7 +71,8 @@ typedef struct {
 void smu_range_init(smu_range_manager_t* rm);
 bool smu_range_request(smu_range_manager_t* rm, smu_current_range_t target, smu_range_reason_t reason);
 bool smu_range_request_voltage(smu_range_manager_t* rm, smu_voltage_range_t target);
-void smu_range_set_autorange(smu_range_manager_t* rm, bool enabled);
+void smu_range_set_current_autorange(smu_range_manager_t* rm, bool enabled);
+void smu_range_set_voltage_autorange(smu_range_manager_t* rm, bool enabled);
 bool smu_range_busy(const smu_range_manager_t* rm);
 
 /* Drive the active ranges again, e.g. after calibration opened all gates. */
@@ -75,7 +83,11 @@ bool smu_range_accept_frame(smu_range_manager_t* rm);
 
 /* Autorange input for an accepted frame: raw CH0 code (fast up-ranging and
  * overload) and the filtered current (down-ranging). */
-void smu_range_autorange_frame(smu_range_manager_t* rm, int32_t current_code, float filtered_current_A);
+void smu_range_current_autorange_frame(smu_range_manager_t* rm, int32_t current_code, float filtered_current_A);
+
+/* CH1 clipping overrides confirmation; voltage inputs are calibrated and
+ * correspond to the currently active voltage range. */
+void smu_range_voltage_autorange_frame(smu_range_manager_t* rm, int32_t code, float voltage_V, float filtered_V);
 
 /* Applies queued switches and advances down-range persistence. elapsed_ms may be 0. */
 void smu_range_tick_ms(smu_range_manager_t* rm, uint32_t elapsed_ms);

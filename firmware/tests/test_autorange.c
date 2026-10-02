@@ -55,7 +55,7 @@ static int one_hot_count(void) {
 static void feed(smu_range_manager_t* rm, float amps, int n) {
     for (int i = 0; i < n; i++) {
         if (smu_range_accept_frame(rm))
-            smu_range_autorange_frame(rm, code_for(amps, rm->active), amps);
+            smu_range_current_autorange_frame(rm, code_for(amps, rm->active), amps);
         smu_range_tick_ms(rm, 0u);
     }
 }
@@ -74,7 +74,7 @@ static void boot(smu_range_manager_t* rm) {
     CHECK(smu_range_request(rm, SMU_RANGE_1P5A, SMU_RANGE_REASON_USER));
     CHECK(smu_range_request_voltage(rm, SMU_VRANGE_15V));
     smu_range_tick_ms(rm, 0u);
-    smu_range_set_autorange(rm, true);
+    smu_range_set_current_autorange(rm, true);
 }
 
 static void test_boot_and_settle(void) {
@@ -155,7 +155,7 @@ static void test_hysteresis_band_stable(void) {
 static void test_manual_disables_autorange(void) {
     smu_range_manager_t rm;
     boot(&rm);
-    smu_range_set_autorange(&rm, false);
+    smu_range_set_current_autorange(&rm, false);
     run(&rm, 50e-6f, 200);
     CHECK(rm.active == SMU_RANGE_1P5A);
     CHECK(smu_range_request(&rm, SMU_RANGE_10MA, SMU_RANGE_REASON_USER));
@@ -176,7 +176,86 @@ static void test_reassert_after_all_off(void) {
     CHECK(gate[SMU_RANGE_10MA] && one_hot_count() == 1);
 }
 
+static void voltage_settle(smu_range_manager_t* rm) {
+    while (!smu_range_accept_frame(rm)) {
+    }
+}
+
+static void voltage_frame(smu_range_manager_t* rm, float value, float filtered, int32_t code) {
+    CHECK(smu_range_accept_frame(rm));
+    smu_range_voltage_autorange_frame(rm, code, value, filtered);
+}
+
+static void test_voltage_autorange(void) {
+    for (int sign = -1; sign <= 1; sign += 2) {
+        smu_range_manager_t rm;
+        boot(&rm);
+        CHECK(!rm.voltage_autorange_enabled);
+        voltage_settle(&rm);
+        smu_range_set_current_autorange(&rm, false);
+        smu_range_set_voltage_autorange(&rm, true);
+        CHECK(!rm.current_autorange_enabled);
+        for (int i = 0; i < 99; i++) {
+            voltage_frame(&rm, sign * 5.0f, sign * 5.0f, 0);
+            smu_range_tick_ms(&rm, 1u);
+        }
+        CHECK(rm.vactive == SMU_VRANGE_15V && !rm.vpending);
+        voltage_frame(&rm, sign * 5.0f, sign * 5.0f, 0);
+        smu_range_tick_ms(&rm, 1u);
+        smu_range_tick_ms(&rm, 0u);
+        CHECK(rm.vactive == SMU_VRANGE_6V && v6);
+        int dropped = 0;
+        while (!smu_range_accept_frame(&rm))
+            dropped++;
+        CHECK(dropped == 40);
+        voltage_frame(&rm, sign * 6.19f, sign * 6.19f, 0);
+        CHECK(!rm.vpending);
+        voltage_frame(&rm, sign * 6.2f, 0, 0);
+        CHECK(!rm.vpending);
+        voltage_frame(&rm, sign * 6.19f, 0, 0); /* spike resets confirmation */
+        voltage_frame(&rm, sign * 6.2f, 0, 0);
+        CHECK(!rm.vpending);
+        CHECK(smu_range_request(&rm, SMU_RANGE_10MA, SMU_RANGE_REASON_USER));
+        voltage_frame(&rm, sign * 6.2f, 0, 0); /* combine with current switch */
+        CHECK(rm.vpending && rm.vactive == SMU_VRANGE_6V);
+        smu_range_tick_ms(&rm, 0u);
+        CHECK(rm.active == SMU_RANGE_10MA && rm.vactive == SMU_VRANGE_15V);
+        voltage_settle(&rm);
+        for (int i = 0; i < 200; i++) {
+            voltage_frame(&rm, sign * 5.1f, sign * 4.0f, 0);
+            smu_range_tick_ms(&rm, 1u);
+        }
+        CHECK(rm.vactive == SMU_VRANGE_15V && !rm.vpending);
+        for (int i = 0; i < 90; i++) {
+            voltage_frame(&rm, 0, 0, 0);
+            smu_range_tick_ms(&rm, 1u);
+        }
+        voltage_frame(&rm, 0, sign * 5.1f, 0); /* filtered reading blocks down */
+        smu_range_tick_ms(&rm, 1u);
+        CHECK(rm.voltage_down_ms == 0);
+        voltage_frame(&rm, 0, 0, 0);
+        smu_range_tick_ms(&rm, 1u);
+        smu_range_tick_ms(&rm, 1u); /* no new frames */
+        CHECK(rm.voltage_down_ms == 0);
+        CHECK(smu_range_request_voltage(&rm, SMU_VRANGE_6V));
+        smu_range_tick_ms(&rm, 0u);
+        voltage_settle(&rm);
+        voltage_frame(&rm, 0, 0, sign * 8220000);
+        CHECK(rm.vpending); /* clipping bypasses two-frame confirmation */
+        smu_range_tick_ms(&rm, 0u);
+        CHECK(rm.vactive == SMU_VRANGE_15V);
+        voltage_settle(&rm);
+        smu_range_set_voltage_autorange(&rm, false);
+        for (int i = 0; i < 200; i++) {
+            voltage_frame(&rm, 0, 0, 0);
+            smu_range_tick_ms(&rm, 1u);
+        }
+        CHECK(rm.vactive == SMU_VRANGE_15V && !rm.vpending);
+    }
+}
+
 int main(void) {
+    test_voltage_autorange();
     test_boot_and_settle();
     test_down_jumps_directly();
     test_up_to_smallest_fit();

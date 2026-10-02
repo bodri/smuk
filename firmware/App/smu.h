@@ -10,7 +10,7 @@
  * peripheral init and smu_process() from the main loop.
  *
  * Current scope: measurement only (no sourcing). Boots in 1.5 A / 15 V with
- * current autorange enabled.
+ * current and voltage autorange enabled.
  */
 
 /* Loads calibration, brings up the ADS131M03, selects the boot ranges and
@@ -23,9 +23,12 @@ void smu_process(void);
 void smu_get_measurement(smu_measurement_outputs_t* out);
 const smu_context_t* smu_get_context(void);
 
-/* Manual current range; disables autorange. */
+/* Manual current range; disables current autorange. */
 smu_status_t smu_set_current_range(smu_current_range_t range);
-void smu_set_autorange(bool enabled);
+/* Current autorange control. */
+void smu_set_current_autorange(bool enabled);
+void smu_set_voltage_autorange(bool enabled);
+/* Manual voltage range; disables voltage autorange on success. */
 smu_status_t smu_set_voltage_range(smu_voltage_range_t range);
 
 /* Tuning knobs (thresholds, persistence, discard counts). */

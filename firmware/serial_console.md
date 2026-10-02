@@ -38,8 +38,9 @@ wait for the save response and fresh valid measurements afterward.
 | `MEAS?` | Precision filtered measurements in amperes/volts, ranges and validity |
 | `RAW?` | Latest raw CH0/CH1/CH2 codes; these are not averaged |
 | `RANGE:I 1.5A` / `100MA` / `10MA` / `1MA` / `100UA` | Request fixed current range and disable autorange |
-| `RANGE:V 15V` / `6V` | Request voltage range |
-| `AUTORANGE ON` / `OFF` | Control current autorange |
+| `RANGE:V 15V` / `6V` | Request fixed voltage range and disable voltage autorange |
+| `AUTORANGE ON` / `OFF` or `AUTORANGE:I ON` / `OFF` | Control current autorange |
+| `AUTORANGE:V ON` / `OFF` | Control voltage autorange independently |
 | `CAL:SHOW?` | Staged measurement coefficients, dirty flag and active Flash sequence |
 | `CAL:BEGIN V` / `I` / `BUS` | Start a point set for the selected fixed range/channel |
 | `CAL:CAPTURE <reference>` | Average 256 fresh accepted raw ADC samples; reference in volts for V/BUS or amperes for I |
@@ -54,12 +55,26 @@ references using the normal measurement input path, or an externally arranged
 CALBUS connection. The entered reference must be independently measured, not
 the nominal CALBUS label or the SMU's already calibrated display.
 
+## Voltage autorange
+
+Startup selects 15 V with both current and voltage autorange enabled.
+Send `AUTORANGE:V OFF` to disable automatic voltage range selection.
+`STATUS?` reports current control as `autorange` and voltage control as `autorange_v`.
+
+On the 6 V range, two consecutive calibrated CH1 readings with magnitude at
+least 6.2 V select 15 V. ADC clipping selects 15 V immediately. On the 15 V
+range, instantaneous and fast filtered readings must both remain at or below
+5.0 V in magnitude for 100 ms before selecting 6 V. This applies to either
+polarity. Each switch resets measurement filters and discards settling frames.
+Manual `RANGE:V` selection disables voltage autorange. Disable both autoranges
+for manual calibration.
+
 ## Manual calibration workflow
 
 1. Record `CAL:SHOW?`, warm up the board and reference instruments, and establish
    the physical reference connection. For voltage/current calibration use the
    normal measurement path; for BUS, measure the manually set CALBUS with a DMM.
-2. Send `AUTORANGE OFF`, select the current and voltage ranges, and wait for
+2. Send `AUTORANGE:I OFF` and `AUTORANGE:V OFF`, select the current and voltage ranges, and wait for
    `STATUS?` to show `valid=1`. Allow the physical reference to settle too.
 3. Send `CAL:BEGIN V`, `I`, or `BUS`. Both ranges are locked for this point set:
    a console range/autorange command clears the set. Range changes are rejected
@@ -86,7 +101,8 @@ the nominal CALBUS label or the SMU's already calibrated display.
 Example for the 6 V range (replace reference values with actual DMM readings):
 
 ```text
-AUTORANGE OFF
+AUTORANGE:I OFF
+AUTORANGE:V OFF
 RANGE:V 6V
 STATUS?
 CAL:BEGIN V

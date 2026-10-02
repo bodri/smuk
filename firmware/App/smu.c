@@ -27,7 +27,8 @@ static void fault(uint32_t bits) {
 bool smu_init(void) {
     memset(&g, 0, sizeof(g));
     g.state = SMU_STATE_POWER_UP;
-    g.autorange = true;
+    g.current_autorange = true;
+    g.voltage_autorange = true;
 
     /*
      * smu_cal_store_init() DOES NOT erase Flash.
@@ -53,7 +54,8 @@ bool smu_init(void) {
         fault(SMU_FAULT_RANGE);
         return false;
     }
-    smu_range_set_autorange(&ranges, g.autorange);
+    smu_range_set_current_autorange(&ranges, g.current_autorange);
+    smu_range_set_voltage_autorange(&ranges, g.voltage_autorange);
     smu_measurement_set_valid(true);
 
     ads131m03_dma_init();
@@ -89,8 +91,12 @@ static void process_frames(void) {
         smu_measurement_get_outputs(&smu_outputs);
         smu_console_frame(&f, ranges.active, ranges.vactive);
 
-        if (g.state == SMU_STATE_NORMAL)
-            smu_range_autorange_frame(&ranges, f.ch0, smu_outputs.fast.current_A);
+        if (g.state == SMU_STATE_NORMAL) {
+            smu_range_current_autorange_frame(&ranges, f.ch0, smu_outputs.fast.current_A);
+            const smu_linear_cal_t cal = smu_calibration_get()->measurement.voltage[ranges.vactive];
+            const float voltage = smu_voltage_from_adc(smu_ads_code_to_volts(f.ch1), ranges.vactive) * cal.gain + cal.offset;
+            smu_range_voltage_autorange_frame(&ranges, f.ch1, voltage, smu_outputs.fast.voltage_V);
+        }
     }
 }
 
@@ -103,12 +109,14 @@ static void update_calibration_state(void) {
         fault(SMU_FAULT_CAL);
     } else if (calibrating && g.state == SMU_STATE_NORMAL) {
         g.state = SMU_STATE_CALIBRATION;
-        smu_range_set_autorange(&ranges, false);
+        smu_range_set_current_autorange(&ranges, false);
+        smu_range_set_voltage_autorange(&ranges, false);
         smu_measurement_set_valid(false);
     } else if (!calibrating && g.state == SMU_STATE_CALIBRATION) {
         g.state = SMU_STATE_NORMAL;
         smu_range_reassert(&ranges);
-        smu_range_set_autorange(&ranges, g.autorange);
+        smu_range_set_current_autorange(&ranges, g.current_autorange);
+        smu_range_set_voltage_autorange(&ranges, g.voltage_autorange);
         smu_measurement_set_valid(true);
     }
 }
@@ -150,17 +158,23 @@ const smu_context_t* smu_get_context(void) {
 smu_status_t smu_set_current_range(smu_current_range_t range) {
     if (g.state != SMU_STATE_NORMAL)
         return SMU_ERR_STATE;
-    g.autorange = false;
-    smu_range_set_autorange(&ranges, false);
+    g.current_autorange = false;
+    smu_range_set_current_autorange(&ranges, false);
     if (!smu_range_request(&ranges, range, SMU_RANGE_REASON_USER))
         return (ranges.error == SMU_RANGE_ERR_BAD_REQUEST) ? SMU_ERR_ARG : SMU_ERR_STATE;
     return SMU_OK;
 }
 
-void smu_set_autorange(bool enabled) {
-    g.autorange = enabled;
+void smu_set_current_autorange(bool enabled) {
+    g.current_autorange = enabled;
     if (g.state == SMU_STATE_NORMAL)
-        smu_range_set_autorange(&ranges, enabled);
+        smu_range_set_current_autorange(&ranges, enabled);
+}
+
+void smu_set_voltage_autorange(bool enabled) {
+    g.voltage_autorange = enabled;
+    if (g.state == SMU_STATE_NORMAL)
+        smu_range_set_voltage_autorange(&ranges, enabled);
 }
 
 smu_status_t smu_set_voltage_range(smu_voltage_range_t range) {
@@ -168,6 +182,7 @@ smu_status_t smu_set_voltage_range(smu_voltage_range_t range) {
         return SMU_ERR_STATE;
     if (!smu_range_request_voltage(&ranges, range))
         return (ranges.error == SMU_RANGE_ERR_BAD_REQUEST) ? SMU_ERR_ARG : SMU_ERR_STATE;
+    smu_set_voltage_autorange(false);
     return SMU_OK;
 }
 

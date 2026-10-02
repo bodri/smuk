@@ -131,7 +131,10 @@ The helper programs `build/smuk.elf` using STM32CubeProgrammer over SWD in under
 The ST-LINK USB connection provides a USART3 Virtual COM Port at **115200 baud,
 8N1, no flow control**. The firmware console supports measurement/raw queries,
 range selection, and manual calibration from externally applied references.
-Start with `HELP` or `PING`.
+Start with `HELP` or `PING`. Current and voltage autorange are controlled
+independently with `AUTORANGE:I` and `AUTORANGE:V`; both default to enabled.
+Voltage starts at 15 V and autorange switches up at 6.2 V magnitude and down at
+5.0 V after 100 ms. Disable both autoranges during manual calibration.
 
 See [Serial console and manual calibration](firmware/serial_console.md) for the
 command list, terminal setup, calibration capture/fit/save workflow, and host tests.

@@ -17,7 +17,7 @@ static bool is_smaller(smu_current_range_t a, smu_current_range_t b) {
 }
 
 static bool fits(const smu_range_manager_t* rm, float abs_A, smu_current_range_t r) {
-    return abs_A < rm->cfg.fit_fraction * smu_current_range_fs_A(r);
+    return abs_A < rm->cfg.current_fit_fraction * smu_current_range_fs_A(r);
 }
 
 /* Smallest range that fits abs_A; 1.5 A if none does. */
@@ -28,10 +28,17 @@ static smu_current_range_t smallest_fit(const smu_range_manager_t* rm, float abs
     return SMU_RANGE_1P5A;
 }
 
-static void reset_autorange(smu_range_manager_t* rm) {
-    rm->up_count = 0;
-    rm->down_ms = 0;
-    rm->down_candidate = false;
+static void reset_current_autorange(smu_range_manager_t* rm) {
+    rm->current_up_count = 0;
+    rm->current_down_ms = 0;
+    rm->current_down_candidate = false;
+}
+
+static void reset_voltage_autorange(smu_range_manager_t* rm) {
+    rm->voltage_up_count = 0;
+    rm->voltage_down_ms = 0;
+    rm->voltage_down_candidate = false;
+    rm->voltage_frame_seen = false;
 }
 
 static void enter_fault(smu_range_manager_t* rm) {
@@ -54,7 +61,7 @@ static void apply_switch(smu_range_manager_t* rm) {
         }
         rm->active = rm->requested;
         smu_measurement_set_current_range(rm->active);
-        discard = rm->cfg.discard_frames[rm->active];
+        discard = rm->cfg.current_discard_frames[rm->active];
         rm->switch_count++;
     }
 
@@ -77,7 +84,8 @@ static void apply_switch(smu_range_manager_t* rm) {
     rm->tx_state = SMU_RANGE_TX_SETTLE;
     rm->measurement_valid = false;
     rm->servo_allowed = false;
-    reset_autorange(rm);
+    reset_current_autorange(rm);
+    reset_voltage_autorange(rm);
 }
 
 void smu_range_init(smu_range_manager_t* rm) {
@@ -88,19 +96,23 @@ void smu_range_init(smu_range_manager_t* rm) {
     rm->vrequested = SMU_VRANGE_15V;
     rm->tx_state = SMU_RANGE_TX_IDLE;
 
-    rm->cfg.up_fraction = 0.90f;
-    rm->cfg.overload_fraction = 1.05f;
-    rm->cfg.fit_fraction = 0.70f;
-    rm->cfg.up_confirm_frames = 2u;
-    rm->cfg.down_persist_ms = 50u;
+    rm->cfg.current_up_fraction = 0.90f;
+    rm->cfg.current_overload_fraction = 1.05f;
+    rm->cfg.current_fit_fraction = 0.70f;
+    rm->cfg.current_up_confirm_frames = 2u;
+    rm->cfg.current_down_persist_ms = 50u;
     /* ~4 kSPS: covers the in-flight frame, sinc3 latency and analog settling.
      * The high-ohm shunts settle slowest. */
-    rm->cfg.discard_frames[SMU_RANGE_1P5A] = 8u;
-    rm->cfg.discard_frames[SMU_RANGE_100MA] = 8u;
-    rm->cfg.discard_frames[SMU_RANGE_10MA] = 8u;
-    rm->cfg.discard_frames[SMU_RANGE_1MA] = 16u;
-    rm->cfg.discard_frames[SMU_RANGE_100UA] = 40u;
+    rm->cfg.current_discard_frames[SMU_RANGE_1P5A] = 8u;
+    rm->cfg.current_discard_frames[SMU_RANGE_100MA] = 8u;
+    rm->cfg.current_discard_frames[SMU_RANGE_10MA] = 8u;
+    rm->cfg.current_discard_frames[SMU_RANGE_1MA] = 16u;
+    rm->cfg.current_discard_frames[SMU_RANGE_100UA] = 40u;
     rm->cfg.vrange_discard_frames = 40u;
+    rm->cfg.voltage_up_V = 6.2f;
+    rm->cfg.voltage_down_V = 5.0f;
+    rm->cfg.voltage_up_confirm_frames = 2u;
+    rm->cfg.voltage_down_persist_ms = 100u;
 }
 
 bool smu_range_busy(const smu_range_manager_t* rm) {
@@ -139,9 +151,38 @@ bool smu_range_request_voltage(smu_range_manager_t* rm, smu_voltage_range_t targ
     return true;
 }
 
-void smu_range_set_autorange(smu_range_manager_t* rm, bool enabled) {
-    rm->autorange_enabled = enabled;
-    reset_autorange(rm);
+void smu_range_set_current_autorange(smu_range_manager_t* rm, bool enabled) {
+    rm->current_autorange_enabled = enabled;
+    reset_current_autorange(rm);
+}
+
+void smu_range_set_voltage_autorange(smu_range_manager_t* rm, bool enabled) {
+    rm->voltage_autorange_enabled = enabled;
+    reset_voltage_autorange(rm);
+}
+
+void smu_range_voltage_autorange_frame(smu_range_manager_t* rm, int32_t code, float voltage_V, float filtered_V) {
+    /* A current switch can already be queued by this same frame. Combine the
+     * voltage request with it, while the old range is still physically active. */
+    if (!rm->voltage_autorange_enabled || rm->vpending || (rm->tx_state != SMU_RANGE_TX_IDLE && rm->tx_state != SMU_RANGE_TX_PENDING))
+        return;
+    rm->voltage_frame_seen = true;
+    bool clipped = code >= ADC_CLIP_CODE || code <= -ADC_CLIP_CODE;
+    if (rm->vactive == SMU_VRANGE_6V) {
+        if (clipped || (isfinite(voltage_V) && fabsf(voltage_V) >= rm->cfg.voltage_up_V)) {
+            if (rm->voltage_up_count < UINT16_MAX)
+                ++rm->voltage_up_count;
+            if (clipped || rm->voltage_up_count >= rm->cfg.voltage_up_confirm_frames)
+                (void)smu_range_request_voltage(rm, SMU_VRANGE_15V);
+        } else
+            rm->voltage_up_count = 0;
+        rm->voltage_down_candidate = false;
+        rm->voltage_down_ms = 0;
+    } else {
+        rm->voltage_down_candidate = !clipped && isfinite(voltage_V) && isfinite(filtered_V) && fabsf(voltage_V) <= rm->cfg.voltage_down_V && fabsf(filtered_V) <= rm->cfg.voltage_down_V;
+        if (!rm->voltage_down_candidate)
+            rm->voltage_down_ms = 0;
+    }
 }
 
 void smu_range_reassert(smu_range_manager_t* rm) {
@@ -170,30 +211,30 @@ bool smu_range_accept_frame(smu_range_manager_t* rm) {
     return rm->tx_state != SMU_RANGE_TX_FAULT;
 }
 
-void smu_range_autorange_frame(smu_range_manager_t* rm, int32_t code, float filtered_A) {
+void smu_range_current_autorange_frame(smu_range_manager_t* rm, int32_t code, float filtered_A) {
     if (!range_is_valid(rm->active))
         return;
 
     const float fs = smu_current_range_fs_A(rm->active);
     const float abs_A = fabsf(smu_current_from_adc(smu_ads_code_to_volts(code), rm->active));
     const bool clipped = code >= ADC_CLIP_CODE || code <= -ADC_CLIP_CODE;
-    const bool saturated = clipped || abs_A > rm->cfg.overload_fraction * fs;
+    const bool saturated = clipped || abs_A > rm->cfg.current_overload_fraction * fs;
 
     rm->overload = saturated;
     smu_measurement_set_overload(saturated);
 
-    if (!rm->autorange_enabled || rm->tx_state != SMU_RANGE_TX_IDLE)
+    if (!rm->current_autorange_enabled || rm->tx_state != SMU_RANGE_TX_IDLE)
         return;
 
     /* Up-range. A saturated reading says nothing about the real current, so
      * go straight to 1.5 A and let down-ranging find the right range;
      * otherwise jump to the smallest range that fits the reading. */
-    if (rm->active != SMU_RANGE_1P5A && abs_A > rm->cfg.up_fraction * fs) {
-        rm->down_candidate = false;
-        rm->down_ms = 0;
+    if (rm->active != SMU_RANGE_1P5A && abs_A > rm->cfg.current_up_fraction * fs) {
+        rm->current_down_candidate = false;
+        rm->current_down_ms = 0;
         if (saturated) {
             (void)smu_range_request(rm, SMU_RANGE_1P5A, SMU_RANGE_REASON_OVERLOAD);
-        } else if (++rm->up_count >= rm->cfg.up_confirm_frames) {
+        } else if (++rm->current_up_count >= rm->cfg.current_up_confirm_frames) {
             smu_current_range_t t = smallest_fit(rm, abs_A);
             if (!is_smaller(rm->active, t))
                 t = (smu_current_range_t)((int)rm->active - 1);
@@ -201,14 +242,14 @@ void smu_range_autorange_frame(smu_range_manager_t* rm, int32_t code, float filt
         }
         return;
     }
-    rm->up_count = 0;
+    rm->current_up_count = 0;
 
     /* Down-range candidate: some smaller range fits the filtered current.
-     * Must hold for down_persist_ms (checked in tick). */
-    rm->last_filtered_A = fabsf(filtered_A);
-    rm->down_candidate = is_smaller(smallest_fit(rm, rm->last_filtered_A), rm->active);
-    if (!rm->down_candidate)
-        rm->down_ms = 0;
+     * Must hold for current_down_persist_ms (checked in tick). */
+    rm->current_last_filtered_A = fabsf(filtered_A);
+    rm->current_down_candidate = is_smaller(smallest_fit(rm, rm->current_last_filtered_A), rm->active);
+    if (!rm->current_down_candidate)
+        rm->current_down_ms = 0;
 }
 
 void smu_range_tick_ms(smu_range_manager_t* rm, uint32_t elapsed_ms) {
@@ -220,12 +261,24 @@ void smu_range_tick_ms(smu_range_manager_t* rm, uint32_t elapsed_ms) {
         return;
     }
 
-    if (!rm->autorange_enabled || rm->tx_state != SMU_RANGE_TX_IDLE || !rm->down_candidate)
+    if (elapsed_ms && rm->voltage_autorange_enabled && rm->tx_state == SMU_RANGE_TX_IDLE) {
+        if (rm->voltage_frame_seen && rm->voltage_down_candidate && rm->vactive == SMU_VRANGE_15V) {
+            if (rm->voltage_down_ms >= rm->cfg.voltage_down_persist_ms || elapsed_ms >= rm->cfg.voltage_down_persist_ms - rm->voltage_down_ms) {
+                rm->voltage_down_ms = 0;
+                (void)smu_range_request_voltage(rm, SMU_VRANGE_6V);
+            } else
+                rm->voltage_down_ms += elapsed_ms;
+        } else
+            rm->voltage_down_ms = 0;
+        rm->voltage_frame_seen = false;
+    }
+
+    if (!rm->current_autorange_enabled || rm->tx_state != SMU_RANGE_TX_IDLE || !rm->current_down_candidate)
         return;
 
-    rm->down_ms += elapsed_ms;
-    if (rm->down_ms >= rm->cfg.down_persist_ms) {
-        (void)smu_range_request(rm, smallest_fit(rm, rm->last_filtered_A), SMU_RANGE_REASON_AUTORANGE);
-        reset_autorange(rm);
+    rm->current_down_ms += elapsed_ms;
+    if (rm->current_down_ms >= rm->cfg.current_down_persist_ms) {
+        (void)smu_range_request(rm, smallest_fit(rm, rm->current_last_filtered_A), SMU_RANGE_REASON_AUTORANGE);
+        reset_current_autorange(rm);
     }
 }

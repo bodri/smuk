@@ -106,7 +106,6 @@ int main(void) {
     }
 
     smu_ctx = smu_get_context();
-    smu_set_voltage_range(SMU_VRANGE_6V);
 
     /* USER CODE END 2 */
 
