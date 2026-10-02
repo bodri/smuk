@@ -6,10 +6,10 @@
  */
 
 #include "ads131m03.h"
+#include "smu_log.h"
 
 #include "ads131m03_port.h"
 
-#include <stdio.h>
 #include <string.h>
 
 static uint8_t tx_frame[ADS_DMA_FRAME_BYTES];
@@ -252,16 +252,14 @@ static bool xfer_cmd_response(uint16_t cmd, uint16_t* response, uint8_t last[15]
 }
 
 static void logreg(const char* name, uint16_t v) {
-    char b[48];
-    (void)snprintf(b, sizeof(b), "ADS %-5s = 0x%04X\r\n", name, (unsigned)v);
-    ads131m03_port_log(b);
+    (void)smu_log_printf("ADC ADS %-5s = 0x%04X\r\n", name, (unsigned)v);
 }
 
 bool ads131m03_bringup_run(ads131m03_bringup_result_t* o) {
     if (!o)
         return false;
     memset(o, 0, sizeof(*o));
-    ads131m03_port_log("\r\nSMU ADS131M03 bring-up\r\nOutput remains SAFE/OFF\r\n");
+    (void)smu_log_write("\r\nADC ADS131M03 bring-up\r\nOutput remains SAFE/OFF\r\n");
     if (!ads131m03_port_init())
         return false;
 
@@ -270,7 +268,7 @@ bool ads131m03_bringup_run(ads131m03_bringup_result_t* o) {
     ads131m03_port_delay_ms(2);
     ads131m03_port_reset(false);
     if (!ads131m03_port_wait_ready(100)) {
-        ads131m03_port_log("ADS DRDY ready timeout\r\n");
+        (void)smu_log_write("ADC ADS DRDY ready timeout\r\n");
         return false;
     }
 
@@ -305,6 +303,6 @@ bool ads131m03_bringup_run(ads131m03_bringup_result_t* o) {
     logreg("ID", o->id);
     logreg("MODE", o->mode);
     logreg("CLOCK", o->clock);
-    ads131m03_port_log((o->id_ok && o->mode_ok && o->clock_ok) ? "ADS131M03 COMMUNICATION: PASS\r\n" : "ADS131M03 REGISTER CHECK: FAIL\r\n");
+    (void)smu_log_write((o->id_ok && o->mode_ok && o->clock_ok) ? "ADC ADS131M03 COMMUNICATION: PASS\r\n" : "ADC ADS131M03 REGISTER CHECK: FAIL\r\n");
     return o->id_ok && o->mode_ok && o->clock_ok;
 }

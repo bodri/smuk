@@ -3,6 +3,9 @@
 #include "ads131m03.h"
 #include "smu_cal_capture.h"
 #include "smu_types.h"
+/* Initialize output before instrument bring-up; repeated calls preserve TX. */
+bool smu_console_transport_init(void);
+/* Initialize command state after calibration has been loaded. */
 bool smu_console_init(void);
 /* Foreground bench tuning, in uncalibrated ADC codes. */
 smu_cal_capture_config_t* smu_console_calibration_config(void);

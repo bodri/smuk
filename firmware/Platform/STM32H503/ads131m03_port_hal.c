@@ -81,8 +81,3 @@ bool ads131m03_port_transfer(const uint8_t* tx, uint8_t* rx, size_t n) {
 void ads131m03_port_delay_ms(uint32_t ms) {
     HAL_Delay(ms);
 }
-
-/* Replace this body with your VCP/UART/USB-CDC transmit function. */
-__weak void ads131m03_port_log(const char* s) {
-    (void)s;
-}

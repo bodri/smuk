@@ -2,6 +2,7 @@
 #include "smu.h"
 #include "smu_calibration.h"
 #include "smu_console_port.h"
+#include "smu_log.h"
 #include "smu_port.h"
 #include <ctype.h>
 #include <math.h>
@@ -14,6 +15,7 @@
 #define CAPTURE_TIMEOUT_MS 2000u
 static char line[LINE_SIZE];
 static size_t used;
+static bool transport_ready;
 static bool discard_line, output_lost;
 static smu_cal_record_t staged;
 static bool dirty;
@@ -214,9 +216,9 @@ static void command(char* text) {
               c->precision_ready, c->acquisition_stale, (unsigned long)c->measurement_age_ms, c->current_clipped, c->voltage_clipped, c->calbus_clipped, c->current_overload, c->voltage_overload);
     } else if (!strcmp(text, "ACQ?") && !*arg) {
         const smu_context_t* c = smu_get_context();
-        reply("ACQ stale=%u age_ms=%lu gaps=%lu pauses=%lu crc=%lu spi=%lu busy=%lu overruns=%lu\r\n", c->acquisition_stale, (unsigned long)c->measurement_age_ms,
+        reply("ACQ stale=%u age_ms=%lu gaps=%lu pauses=%lu crc=%lu spi=%lu busy=%lu overruns=%lu log_dropped=%lu\r\n", c->acquisition_stale, (unsigned long)c->measurement_age_ms,
               (unsigned long)c->acquisition_gap_count, (unsigned long)c->acquisition_pause_count, (unsigned long)c->adc_crc_errors, (unsigned long)c->adc_spi_errors, (unsigned long)c->adc_busy_count,
-              (unsigned long)c->adc_overruns);
+              (unsigned long)c->adc_overruns, (unsigned long)smu_log_dropped());
     } else if ((!strcmp(text, "MEAS?") || !strcmp(text, "RAW?")) && !*arg) {
         smu_measurement_outputs_t out;
         smu_get_measurement(&out);
@@ -358,13 +360,23 @@ static void command(char* text) {
         reply("ERR unknown command; HELP\r\n");
 }
 
+bool smu_console_transport_init(void) {
+    if (transport_ready)
+        return true;
+    if (!smu_console_port_init())
+        return false;
+    smu_log_init(smu_console_port_write);
+    transport_ready = true;
+    return true;
+}
+
 bool smu_console_init(void) {
     staged = *smu_calibration_get();
     capture_cfg = smu_cal_capture_default_config();
     used = points = acquired = 0;
     target = TARGET_NONE;
     discard_line = output_lost = dirty = capturing = ready = echo = false;
-    if (!smu_console_port_init())
+    if (!smu_console_transport_init())
         return false;
     reply("SMUK serial ready 115200 8N1. HELP for commands.\r\n");
     return true;

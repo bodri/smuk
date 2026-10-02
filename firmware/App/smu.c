@@ -6,6 +6,7 @@
 #include "smu_cal_debug.h"
 #include "smu_calibration.h"
 #include "smu_console.h"
+#include "smu_log.h"
 #include "smu_port.h"
 #include <string.h>
 
@@ -28,6 +29,8 @@ ads131m03_dma_frame_t adc_frame;
 smu_measurement_outputs_t smu_outputs;
 
 static void fault(uint32_t bits) {
+    if ((g.faults & bits) != bits)
+        (void)smu_log_printf("SMU fault bits=0x%08lX\r\n", (unsigned long)bits);
     smu_cal_debug_acquisition_gap();
     smu_console_acquisition_gap();
     safety_hw_disable_pa();

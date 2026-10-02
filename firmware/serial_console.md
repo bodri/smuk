@@ -280,3 +280,21 @@ HIGHZ modes at low and high source impedances, measured sample rate, noise with
 each integration setting, and recovery after saving and rebooting. The current
 8–40 frame range allowances and 40-frame impedance/resume allowances remain
 initial values until these measurements establish their margins.
+
+## Shared instrument logging
+
+Console output is initialized before instrument bring-up. ADC diagnostics appear
+before the serial-ready banner; future DAC bring-up uses the same logger.
+`ACQ? log_dropped` reports rejected log messages since logger initialization.
+Logs and command responses share the existing nonblocking UART TX queue. A full
+queue drops the entire log message; command overflow handling is unchanged.
+
+Drivers include `smu_log.h` and call `smu_log_write("DAC ready\r\n")` or
+`smu_log_printf("DAC register=0x%04X\r\n", value)`. Include an ADC/DAC source
+prefix and CRLF yourself. Calls are foreground-only, with no dynamic allocation;
+messages must fit in 192 bytes including the terminator. Do not log per sample.
+Before output registration, logging safely fails and counts the dropped message.
+The console command state initializes after calibration loading without resetting
+the transport, preserving queued startup logs. No commands execute during bring-up.
+
+Host validation: `sh tests/run_log.sh` and `sh tests/run_console.sh`.

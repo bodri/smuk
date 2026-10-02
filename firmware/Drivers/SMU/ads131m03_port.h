@@ -21,6 +21,5 @@ void ads131m03_port_reset(bool asserted);
 bool ads131m03_port_wait_ready(uint32_t timeout_ms);
 bool ads131m03_port_transfer(const uint8_t* tx, uint8_t* rx, size_t n);
 void ads131m03_port_delay_ms(uint32_t ms);
-void ads131m03_port_log(const char* s);
 
 #endif

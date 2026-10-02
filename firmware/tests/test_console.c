@@ -2,6 +2,7 @@
 #include "smu_calibration.h"
 #include "smu_console.h"
 #include "smu_console_port.h"
+#include "smu_log.h"
 #include "smu_port.h"
 #include <assert.h>
 #include <math.h>
@@ -11,11 +12,12 @@ static char input[1024], output[20000];
 static size_t read_at, write_at;
 static uint32_t now;
 static bool lost, save_fail;
-static unsigned saves;
+static unsigned saves, transport_inits;
 static smu_context_t ctx;
 static smu_cal_record_t active;
 
 bool smu_console_port_init(void) {
+    ++transport_inits;
     return true;
 }
 
@@ -138,7 +140,10 @@ int main(void) {
         active.measurement.voltage[i].gain = 1;
     active.measurement.calbus.gain = 1;
     active.vforce.gain = 7;
+    assert(smu_console_transport_init());
+    assert(smu_log_write("ADC startup test\r\n"));
     assert(smu_console_init());
+    assert(transport_inits == 1 && strstr(output, "ADC startup test"));
     assert(strstr(output, "serial ready"));
     send("ping\r\n");
     assert(strstr(output, "PONG"));

@@ -100,13 +100,6 @@ int main(void) {
     MX_ICACHE_Init();
     /* USER CODE BEGIN 2 */
 
-    /* Calibration load, ADS131M03 bring-up, boot ranges and acquisition. */
-    if (!smu_init()) {
-        Error_Handler();
-    }
-
-    smu_ctx = smu_get_context();
-
     /* USER CODE END 2 */
 
     /* Initialize led */
@@ -127,6 +120,18 @@ int main(void) {
 
     /* Infinite loop */
     /* USER CODE BEGIN WHILE */
+
+    /* UART is initialized above; expose logs before instrument bring-up. */
+    if (!smu_console_transport_init()) {
+        Error_Handler();
+    }
+
+    /* Calibration load, ADS131M03 bring-up, boot ranges and acquisition. */
+    if (!smu_init()) {
+        Error_Handler();
+    }
+
+    smu_ctx = smu_get_context();
 
     if (!smu_console_init()) {
         Error_Handler();

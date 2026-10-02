@@ -1,4 +1,5 @@
 #include "smu_console_port.h"
+#include "smu_log.h"
 #include "stm32h5xx_nucleo.h"
 #include <assert.h>
 #include <stdio.h>
@@ -89,6 +90,9 @@ int main(void) {
     memset(full, 'Q', sizeof(full));
     assert(smu_console_port_write(full, sizeof(full)));
     assert(!smu_console_port_write("X", 1));
+    smu_log_init(smu_console_port_write);
+    assert(!smu_log_write("ADC queue full\r\n"));
+    assert(smu_log_dropped() == 1);
     HAL_UART_TxCpltCallback(hcom_uart);
     smu_console_port_read(&byte);
     assert(tx_length == 5);
