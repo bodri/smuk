@@ -41,6 +41,7 @@ typedef struct {
     uint32_t voltage_down_persist_ms;
     uint32_t pa_off_settle_ms;         /* initial output-decay allowance; verify with PA hardware */
     uint16_t impedance_discard_frames; /* initial 40-frame settling allowance; verify on board */
+    uint16_t resume_discard_frames;    /* after explicit acquisition pause */
     uint16_t vrange_discard_frames;    /* frames dropped after a voltage range switch */
 } smu_range_config_t;
 
@@ -94,6 +95,8 @@ bool smu_range_accept_frame(smu_range_manager_t* rm);
  * overload) and the filtered current (down-ranging). */
 void smu_range_update_current_overload(smu_range_manager_t* rm, int32_t current_code);
 /* Reset persistence after acquisition discontinuities without changing requests. */
+/* Resume after an explicit acquisition pause; no GPIO/range change. */
+void smu_range_resume_measurement(smu_range_manager_t* rm);
 void smu_range_acquisition_gap(smu_range_manager_t* rm);
 void smu_range_current_autorange_frame(smu_range_manager_t* rm, int32_t current_code, float filtered_current_A);
 

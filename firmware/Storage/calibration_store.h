@@ -30,6 +30,8 @@ typedef enum { SMU_CAL_LOAD_OK = 0, SMU_CAL_LOAD_DEFAULTS, SMU_CAL_LOAD_INVALID 
 
 void smu_cal_record_defaults(smu_cal_record_t* rec);
 void smu_cal_record_finalize(smu_cal_record_t* rec);
+/* Semantic checks are independent of the CRC/header representation. */
+bool smu_cal_record_usable(const smu_cal_record_t* rec);
 bool smu_cal_record_validate(const smu_cal_record_t* rec);
 
 // Storage backend

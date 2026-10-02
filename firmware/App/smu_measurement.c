@@ -1,9 +1,10 @@
 #include "smu_measurement.h"
+#include <math.h>
 #include <string.h>
 
 #define ADC_POS_FS_CODES 8388608.0f
 #define ADC_FSR_V 1.2f
-#define PREC_MAX 64u
+#define PREC_MAX SMU_PRECISION_MAX_SAMPLES
 
 typedef struct {
     smu_measurement_cal_t cal;
@@ -17,6 +18,7 @@ typedef struct {
     float fi, fv, fc;
     float pi[PREC_MAX], pv[PREC_MAX], pc[PREC_MAX];
     float si, sv, sc;
+    float ci, cv, cc; /* compensated running sums */
     uint16_t pidx, pcount;
     smu_measurement_outputs_t out;
 } meas_ctx_t;
@@ -25,6 +27,20 @@ static meas_ctx_t g;
 
 static float apply_cal(float x, smu_linear_cal_t c) {
     return x * c.gain + c.offset;
+}
+
+static bool usable_linear(smu_linear_cal_t c, float nominal_limit) {
+    return isfinite(c.gain) && c.gain > 0 && isfinite(c.offset) && isfinite(nominal_limit * c.gain + c.offset) && isfinite(-nominal_limit * c.gain + c.offset);
+}
+
+bool smu_measurement_calibration_usable(const smu_measurement_cal_t* cal) {
+    if (!cal)
+        return false;
+    static const float limits[] = {2.4f, 0.12f, 0.012f, 0.0012f, 0.00012f};
+    for (unsigned i = 0; i < 5; ++i)
+        if (!usable_linear(cal->current[i], limits[i]))
+            return false;
+    return usable_linear(cal->voltage[SMU_VRANGE_15V], 24.0f) && usable_linear(cal->voltage[SMU_VRANGE_6V], 10.0f) && usable_linear(cal->calbus, 3.6f);
 }
 
 static int cal_i_index(smu_current_range_t r) {
@@ -54,6 +70,15 @@ float smu_calbus_from_adc(float v) {
     return v * 3.0f;
 }
 
+float smu_measurement_current_from_code(int32_t code, smu_current_range_t range) {
+    const int index = cal_i_index(range);
+    return index >= 0 ? apply_cal(smu_current_from_adc(smu_ads_code_to_volts(code), range), g.cal.current[index]) : 0;
+}
+
+float smu_measurement_voltage_from_code(int32_t code, smu_voltage_range_t range) {
+    return (range == SMU_VRANGE_6V || range == SMU_VRANGE_15V) ? apply_cal(smu_voltage_from_adc(smu_ads_code_to_volts(code), range), g.cal.voltage[range]) : 0;
+}
+
 static void refresh_quality(smu_measurement_t* m) {
     m->fresh = g.fresh && g.has_sample;
     m->settled = g.has_sample && !g.transition;
@@ -68,7 +93,10 @@ static void refresh_quality(smu_measurement_t* m) {
 static void refresh_outputs(void) {
     refresh_quality(&g.out.fast);
     refresh_quality(&g.out.precision);
+    g.out.precision_count = g.pcount;
+    g.out.precision_window = g.cfg.precision_n;
     g.out.precision_ready = g.out.precision.valid && g.pcount == g.cfg.precision_n;
+    g.out.precision.valid = g.out.precision_ready;
 }
 
 static bool clipped(int32_t code) {
@@ -99,26 +127,28 @@ void smu_measurement_init(const smu_measurement_cal_t* cal, const smu_filter_con
     for (int i = 0; i < 2; i++)
         g.cal.voltage[i].gain = 1.0f;
     g.cal.calbus.gain = 1.0f;
-    if (cal)
+    if (smu_measurement_calibration_usable(cal))
         g.cal = *cal;
     g.fresh = true; /* standalone caller supplies fresh frames; SMU monitors acquisition */
     g.cfg.fast_alpha = 0.25f;
     g.cfg.precision_n = 32u;
     if (cfg)
         g.cfg = *cfg;
-    if (g.cfg.fast_alpha <= 0.0f || g.cfg.fast_alpha > 1.0f)
+    if (!isfinite(g.cfg.fast_alpha) || g.cfg.fast_alpha <= 0.0f || g.cfg.fast_alpha > 1.0f)
         g.cfg.fast_alpha = 0.25f;
     if (g.cfg.precision_n < 1u)
         g.cfg.precision_n = 1u;
     if (g.cfg.precision_n > PREC_MAX)
         g.cfg.precision_n = PREC_MAX;
+    refresh_outputs();
 }
 
-void smu_measurement_set_calibration(const smu_measurement_cal_t* cal) {
-    if (!cal)
-        return;
+bool smu_measurement_set_calibration(const smu_measurement_cal_t* cal) {
+    if (!smu_measurement_calibration_usable(cal))
+        return false;
     g.cal = *cal;
     smu_measurement_reset_filters();
+    return true;
 }
 
 void smu_measurement_reset_filters(void) {
@@ -130,8 +160,26 @@ void smu_measurement_reset_filters(void) {
     memset(g.pv, 0, sizeof(g.pv));
     memset(g.pc, 0, sizeof(g.pc));
     g.si = g.sv = g.sc = 0.0f;
+    g.ci = g.cv = g.cc = 0.0f;
     g.pidx = g.pcount = 0u;
     refresh_outputs();
+}
+
+bool smu_measurement_set_precision_samples(uint16_t samples) {
+    if (samples < 1u || samples > PREC_MAX)
+        return false;
+    if (samples != g.cfg.precision_n) {
+        g.cfg.precision_n = samples;
+        smu_measurement_reset_filters();
+    }
+    return true;
+}
+
+static void add_compensated(float* sum, float* correction, float value) {
+    const float adjusted = value - *correction;
+    const float next = *sum + adjusted;
+    *correction = (next - *sum) - adjusted;
+    *sum = next;
 }
 
 void smu_measurement_set_current_range(smu_current_range_t r) {
@@ -213,9 +261,9 @@ bool smu_measurement_process_frame(const ads131m03_frame_t* f) {
     fill(&g.out.fast, f, g.fi, g.fv, g.fc);
     uint16_t n = g.cfg.precision_n, x = g.pidx;
     if (g.pcount == n) {
-        g.si -= g.pi[x];
-        g.sv -= g.pv[x];
-        g.sc -= g.pc[x];
+        add_compensated(&g.si, &g.ci, -g.pi[x]);
+        add_compensated(&g.sv, &g.cv, -g.pv[x]);
+        add_compensated(&g.sc, &g.cc, -g.pc[x]);
         if (g.pc_clipped[x])
             --g.pc_clipped_count;
     } else
@@ -226,9 +274,9 @@ bool smu_measurement_process_frame(const ads131m03_frame_t* f) {
     g.pc_clipped[x] = clipped(f->ch[2]);
     if (g.pc_clipped[x])
         ++g.pc_clipped_count;
-    g.si += i;
-    g.sv += v;
-    g.sc += c;
+    add_compensated(&g.si, &g.ci, i);
+    add_compensated(&g.sv, &g.cv, v);
+    add_compensated(&g.sc, &g.cc, c);
     g.pidx = (uint16_t)((x + 1u) % n);
     fill(&g.out.precision, f, g.si / g.pcount, g.sv / g.pcount, g.sc / g.pcount);
     g.out.precision.calbus_clipped = g.pc_clipped_count != 0;

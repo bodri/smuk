@@ -23,9 +23,10 @@ static enum { TARGET_NONE, TARGET_V, TARGET_I, TARGET_BUS } target;
 static smu_current_range_t current_range;
 static smu_voltage_range_t voltage_range;
 static bool capture_input_10m;
-static float x[POINTS], y[POINTS];
+static float x[POINTS], y[POINTS], point_noise[POINTS], point_drift[POINTS];
+static smu_cal_capture_t capture;
+static smu_cal_capture_config_t capture_cfg;
 static unsigned points, acquired;
-static int64_t code_sum;
 static bool capturing;
 static uint32_t started;
 static float reference;
@@ -82,17 +83,44 @@ static bool same_range(void) {
 static void show_cal(void) {
     char a[32], b[32];
     const smu_cal_record_t* active = smu_calibration_get();
-    reply("CAL active sequence=%lu staged_dirty=%u\r\n", (unsigned long)active->sequence, dirty);
+    reply("CAL active sequence=%lu staged_dirty=%u source=%s\r\n", (unsigned long)active->sequence, dirty, smu_calibration_load_result() == SMU_CAL_LOAD_OK ? "FLASH" : "DEFAULTS");
     for (unsigned i = 0; i < 5; ++i)
         reply("I %s gain=%s offset_A=%s\r\n", irange_name((smu_current_range_t)(i + 1)), number(staged.measurement.current[i].gain, a), number(staged.measurement.current[i].offset, b));
     for (unsigned i = 0; i < 2; ++i)
         reply("V %s gain=%s offset_V=%s\r\n", vrange_name((smu_voltage_range_t)i), number(staged.measurement.voltage[i].gain, a), number(staged.measurement.voltage[i].offset, b));
     reply("BUS gain=%s offset_V=%s\r\n", number(staged.measurement.calbus.gain, a), number(staged.measurement.calbus.offset, b));
+    reply("CAPTURE LIMIT rms_codes=%s drift_codes=%s minimum_fit_span_codes=%u\r\n", number(capture_cfg.max_noise_codes, a), number(capture_cfg.max_drift_codes, b),
+          capture_cfg.minimum_fit_span_codes);
+}
+
+static float nominal_from_code(float code) {
+    const float adc_v = code * (1.2f / 8388608.0f);
+    return target == TARGET_I ? smu_current_from_adc(adc_v, current_range) : target == TARGET_V ? smu_voltage_from_adc(adc_v, voltage_range) : smu_calbus_from_adc(adc_v);
 }
 
 static void fit(void) {
     if (target == TARGET_NONE || capturing || points < 2 || !stable() || !same_range()) {
         reply("ERR fit requires >=2 points and unchanged fixed ranges\r\n");
+        return;
+    }
+    float minimum = x[0], maximum = x[0], worst_noise = 0;
+    float reference_minimum = y[0], reference_maximum = y[0];
+    for (unsigned i = 0; i < points; ++i) {
+        if (x[i] < minimum)
+            minimum = x[i];
+        if (x[i] > maximum)
+            maximum = x[i];
+        if (y[i] < reference_minimum)
+            reference_minimum = y[i];
+        if (y[i] > reference_maximum)
+            reference_maximum = y[i];
+        if (point_noise[i] > worst_noise)
+            worst_noise = point_noise[i];
+    }
+    char span[32], ref_span[32];
+    reply("FIT QUALITY nominal_span=%s reference_span=%s\r\n", number(maximum - minimum, span), number(reference_maximum - reference_minimum, ref_span));
+    if (maximum - minimum < fmaxf(nominal_from_code(capture_cfg.minimum_fit_span_codes), 20.0f * worst_noise)) {
+        reply("ERR insufficient point span for capture noise; spread references farther apart\r\n");
         return;
     }
     smu_linear_cal_t coefficient;
@@ -168,7 +196,8 @@ static void command(char* text) {
     if (!arg)
         arg = "";
     if (!strcmp(text, "HELP") && !*arg) {
-        reply("STATUS? ACQ? MEAS? RAW? CAL:SHOW? ECHO ON|OFF; IMPEDANCE 10M|HIGHZ\r\nRANGE:I 1.5A|100MA|10MA|1MA|100UA; RANGE:V 15V|6V; AUTORANGE[:I|:V] ON|OFF\r\nCAL:BEGIN V|I|BUS; CAL:CAPTURE "
+        reply("STATUS? ACQ? MEAS? RAW? CAL:SHOW? ECHO ON|OFF; INTEGRATION 1MS|8MS|20MS|50MS|100MS; IMPEDANCE 10M|HIGHZ\r\nRANGE:I 1.5A|100MA|10MA|1MA|100UA; RANGE:V 15V|6V; AUTORANGE[:I|:V] "
+              "ON|OFF\r\nCAL:BEGIN V|I|BUS; CAL:CAPTURE "
               "<reference in V/A>; CAL:FIT; "
               "CAL:POINTS?\r\nCAL:SAVE; CAL:RESET; CAL:ABORT; PING\r\n");
     } else if (!strcmp(text, "PING") && !*arg)
@@ -185,18 +214,20 @@ static void command(char* text) {
               c->precision_ready, c->acquisition_stale, (unsigned long)c->measurement_age_ms, c->current_clipped, c->voltage_clipped, c->calbus_clipped, c->current_overload, c->voltage_overload);
     } else if (!strcmp(text, "ACQ?") && !*arg) {
         const smu_context_t* c = smu_get_context();
-        reply("ACQ stale=%u age_ms=%lu gaps=%lu crc=%lu spi=%lu busy=%lu overruns=%lu\r\n", c->acquisition_stale, (unsigned long)c->measurement_age_ms, (unsigned long)c->acquisition_gap_count,
-              (unsigned long)c->adc_crc_errors, (unsigned long)c->adc_spi_errors, (unsigned long)c->adc_busy_count, (unsigned long)c->adc_overruns);
+        reply("ACQ stale=%u age_ms=%lu gaps=%lu pauses=%lu crc=%lu spi=%lu busy=%lu overruns=%lu\r\n", c->acquisition_stale, (unsigned long)c->measurement_age_ms,
+              (unsigned long)c->acquisition_gap_count, (unsigned long)c->acquisition_pause_count, (unsigned long)c->adc_crc_errors, (unsigned long)c->adc_spi_errors, (unsigned long)c->adc_busy_count,
+              (unsigned long)c->adc_overruns);
     } else if ((!strcmp(text, "MEAS?") || !strcmp(text, "RAW?")) && !*arg) {
         smu_measurement_outputs_t out;
         smu_get_measurement(&out);
-        const smu_measurement_t* m = &out.precision;
+        const bool raw = !strcmp(text, "RAW?");
+        const smu_measurement_t* m = raw ? &out.fast : &out.precision;
         char a[32], b[32], c[32];
-        if (!strcmp(text, "RAW?"))
+        if (raw)
             reply("RAW I=%ld V=%ld BUS=%ld valid=%u\r\n", (long)m->adc_i_raw, (long)m->adc_v_raw, (long)m->adc_cal_raw, m->valid);
         else
-            reply("MEAS I_A=%s V_V=%s BUS_V=%s I=%s V=%s valid=%u samples=%lu\r\n", number(m->current_A, a), number(m->voltage_V, b), number(m->calbus_V, c), irange_name(m->range),
-                  vrange_name(m->vrange), m->valid, (unsigned long)out.sample_count);
+            reply("MEAS I_A=%s V_V=%s BUS_V=%s I=%s V=%s valid=%u samples=%lu window=%u/%u\r\n", number(m->current_A, a), number(m->voltage_V, b), number(m->calbus_V, c), irange_name(m->range),
+                  vrange_name(m->vrange), m->valid, (unsigned long)out.sample_count, out.precision_count, out.precision_window);
         reply("QUALITY fresh=%u settled=%u precision_ready=%u I_clip=%u V_clip=%u BUS_clip=%u I_overload=%u V_overload=%u\r\n", m->fresh, m->settled, out.precision_ready, m->current_clipped,
               m->voltage_clipped, m->calbus_clipped, m->current_overload, m->voltage_overload);
     } else if (!strcmp(text, "CAL:ABORT") && !*arg) {
@@ -216,6 +247,8 @@ static void command(char* text) {
         char a[32], b[32];
         for (unsigned i = 0; i < points; ++i)
             reply("POINT %u nominal=%s reference=%s\r\n", i, number(x[i], a), number(y[i], b));
+        for (unsigned i = 0; i < points; ++i)
+            reply("POINT QUALITY %u rms_nominal=%s drift_nominal=%s\r\n", i, number(point_noise[i], a), number(point_drift[i], b));
         reply("OK points=%u\r\n", points);
     } else if (!strcmp(text, "CAL:FIT") && !*arg)
         fit();
@@ -250,11 +283,28 @@ static void command(char* text) {
         else {
             reference = value;
             acquired = 0;
-            code_sum = 0;
+            (void)smu_cal_capture_init(&capture, CAPTURE_SAMPLES);
             capturing = true;
             started = smu_port_millis();
             reply("OK acquiring 256 samples\r\n");
         }
+    } else if (!strcmp(text, "INTEGRATION")) {
+        if (capturing) {
+            reply("ERR capture busy\r\n");
+            return;
+        }
+        const char* names[] = {"1MS", "8MS", "20MS", "50MS", "100MS"};
+        const uint16_t times[] = {1, 8, 20, 50, 100};
+        smu_status_t result = SMU_ERR_ARG;
+        for (unsigned i = 0; i < 5; ++i)
+            if (!strcmp(arg, names[i]))
+                result = smu_set_integration_ms(times[i]);
+        if (result == SMU_OK) {
+            target = TARGET_NONE;
+            points = 0;
+            reply("OK integration selected; wait for MEAS valid=1\r\n");
+        } else
+            reply("ERR integration request status=%u\r\n", result);
     } else if (!strcmp(text, "IMPEDANCE")) {
         if (capturing) {
             reply("ERR capture busy\r\n");
@@ -310,6 +360,7 @@ static void command(char* text) {
 
 bool smu_console_init(void) {
     staged = *smu_calibration_get();
+    capture_cfg = smu_cal_capture_default_config();
     used = points = acquired = 0;
     target = TARGET_NONE;
     discard_line = output_lost = dirty = capturing = ready = echo = false;
@@ -317,6 +368,10 @@ bool smu_console_init(void) {
         return false;
     reply("SMUK serial ready 115200 8N1. HELP for commands.\r\n");
     return true;
+}
+
+smu_cal_capture_config_t* smu_console_calibration_config(void) {
+    return &capture_cfg;
 }
 
 void smu_console_acquisition_gap(void) {
@@ -345,7 +400,11 @@ void smu_console_frame(const ads131m03_dma_frame_t* f, smu_current_range_t irang
         reply("ERR capture near ADC clipping; reduce reference\r\n");
         return;
     }
-    code_sum += code;
+    if (!smu_cal_capture_add(&capture, code)) {
+        capturing = false;
+        reply("ERR capture sample rejected\r\n");
+        return;
+    }
     if (++acquired == CAPTURE_SAMPLES) {
         capturing = false;
         ready = true;
@@ -357,13 +416,22 @@ void smu_console_process(void) {
         output_lost = false;
     if (ready) {
         ready = false;
-        float code = (float)code_sum / CAPTURE_SAMPLES;
-        float adc_v = code * (1.2f / 8388608.0f);
-        x[points] = target == TARGET_I ? smu_current_from_adc(adc_v, current_range) : target == TARGET_V ? smu_voltage_from_adc(adc_v, voltage_range) : smu_calbus_from_adc(adc_v);
-        y[points] = reference;
-        char a[32], b[32];
-        reply("OK POINT %u nominal=%s reference=%s\r\n", points, number(x[points], a), number(y[points], b));
-        ++points;
+        smu_cal_capture_quality_t quality = {0};
+        const bool stable_capture = smu_cal_capture_finish(&capture, &capture_cfg, &quality);
+        char a[32], b[32], c[32], rms_codes[32], drift_codes[32];
+        const float noise = nominal_from_code(quality.noise_codes);
+        const float drift = nominal_from_code(quality.drift_codes);
+        reply("CAPTURE QUALITY rms_nominal=%s drift_nominal=%s span_nominal=%s rms_codes=%s drift_codes=%s samples=%u\r\n", number(noise, a), number(drift, b),
+              number(nominal_from_code(quality.span_codes), c), number(quality.noise_codes, rms_codes), number(quality.drift_codes, drift_codes), capture.count);
+        if (stable_capture) {
+            x[points] = nominal_from_code(quality.mean_code);
+            y[points] = reference;
+            point_noise[points] = noise;
+            point_drift[points] = drift;
+            reply("OK POINT %u nominal=%s reference=%s\r\n", points, number(x[points], a), number(y[points], b));
+            ++points;
+        } else
+            reply("ERR unstable capture; settle reference and retry\r\n");
     }
     if (capturing && smu_port_millis() - started >= CAPTURE_TIMEOUT_MS) {
         capturing = false;

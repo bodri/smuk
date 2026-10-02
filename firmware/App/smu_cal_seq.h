@@ -1,6 +1,7 @@
 #ifndef SMU_CAL_SEQ_H
 #define SMU_CAL_SEQ_H
 #include "cal_hw.h"
+#include "smu_cal_capture.h"
 #include <stdbool.h>
 #include <stdint.h>
 
@@ -31,8 +32,11 @@ typedef struct {
     uint32_t acquisition_timeout_ms;
     uint16_t discard_required, discarded;
     uint16_t acquire_required, acquired;
-    int32_t target_sum;
-    int32_t calbus_sum;
+    smu_cal_capture_config_t capture_cfg;
+    smu_cal_capture_t target_capture, bus_capture;
+    smu_cal_capture_quality_t target_quality, bus_quality;
+    int64_t target_sum;
+    int64_t calbus_sum;
     bool measurement_valid, servo_allowed, fault;
 
     float ratio;

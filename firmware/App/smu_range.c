@@ -123,6 +123,7 @@ void smu_range_init(smu_range_manager_t* rm) {
     rm->cfg.current_discard_frames[SMU_RANGE_1MA] = 16u;
     rm->cfg.current_discard_frames[SMU_RANGE_100UA] = 40u;
     rm->cfg.vrange_discard_frames = 40u;
+    rm->cfg.resume_discard_frames = 40u;
     rm->cfg.impedance_discard_frames = 40u;
     rm->cfg.pa_off_settle_ms = 10u;
     rm->cfg.voltage_up_V = 6.2f;
@@ -262,13 +263,25 @@ bool smu_range_accept_frame(smu_range_manager_t* rm) {
     return rm->tx_state != SMU_RANGE_TX_FAULT;
 }
 
+void smu_range_resume_measurement(smu_range_manager_t* rm) {
+    if (rm->tx_state == SMU_RANGE_TX_FAULT)
+        return;
+    rm->tx_state = SMU_RANGE_TX_SETTLE;
+    rm->discard_left = rm->cfg.resume_discard_frames;
+    rm->measurement_valid = rm->servo_allowed = false;
+    smu_measurement_set_range_transition(true);
+    smu_measurement_reset_filters();
+    reset_current_autorange(rm);
+    reset_voltage_autorange(rm);
+}
+
 void smu_range_acquisition_gap(smu_range_manager_t* rm) {
     reset_current_autorange(rm);
     reset_voltage_autorange(rm);
 }
 
 void smu_range_update_current_overload(smu_range_manager_t* rm, int32_t code) {
-    const float abs_A = fabsf(smu_current_from_adc(smu_ads_code_to_volts(code), rm->active));
+    const float abs_A = fabsf(smu_measurement_current_from_code(code, rm->active));
     rm->overload = range_is_valid(rm->active) && (code >= ADC_CLIP_CODE || code <= -ADC_CLIP_CODE || abs_A > rm->cfg.current_overload_fraction * smu_current_range_fs_A(rm->active));
     smu_measurement_set_overload(rm->overload);
 }
@@ -278,7 +291,7 @@ void smu_range_current_autorange_frame(smu_range_manager_t* rm, int32_t code, fl
         return;
 
     const float fs = smu_current_range_fs_A(rm->active);
-    const float abs_A = fabsf(smu_current_from_adc(smu_ads_code_to_volts(code), rm->active));
+    const float abs_A = fabsf(smu_measurement_current_from_code(code, rm->active));
     const bool clipped = code >= ADC_CLIP_CODE || code <= -ADC_CLIP_CODE;
     const bool saturated = clipped || abs_A > rm->cfg.current_overload_fraction * fs;
 
@@ -290,7 +303,7 @@ void smu_range_current_autorange_frame(smu_range_manager_t* rm, int32_t code, fl
     /* Up-range. A saturated reading says nothing about the real current, so
      * go straight to 1.5 A and let down-ranging find the right range;
      * otherwise jump to the smallest range that fits the reading. */
-    if (rm->active != SMU_RANGE_1P5A && abs_A > rm->cfg.current_up_fraction * fs) {
+    if (rm->active != SMU_RANGE_1P5A && (clipped || abs_A > rm->cfg.current_up_fraction * fs)) {
         rm->current_down_candidate = false;
         rm->current_down_ms = 0;
         if (saturated) {

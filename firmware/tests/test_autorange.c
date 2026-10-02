@@ -346,7 +346,43 @@ static void test_pa_impedance_sequence(void) {
     CHECK(s.state == SMU_STATE_FAULT && !input_10m);
 }
 
+static void test_calibrated_current_autorange(void) {
+    smu_range_manager_t rm;
+    boot(&rm);
+    voltage_settle(&rm);
+    smu_range_set_current_autorange(&rm, false);
+    CHECK(smu_range_request(&rm, SMU_RANGE_100UA, SMU_RANGE_REASON_USER));
+    smu_range_tick_ms(&rm, 0);
+    voltage_settle(&rm);
+    smu_measurement_cal_t cal = {0};
+    for (unsigned i = 0; i < 5; ++i)
+        cal.current[i].gain = 2;
+    for (unsigned i = 0; i < 2; ++i)
+        cal.voltage[i].gain = 1;
+    cal.calbus.gain = 1;
+    CHECK(smu_measurement_set_calibration(&cal));
+    smu_range_set_current_autorange(&rm, true);
+    /* Nominal 50uA becomes physical 100uA: must up-range despite nominal fit. */
+    smu_range_current_autorange_frame(&rm, code_for(50e-6f, rm.active), 100e-6f);
+    smu_range_current_autorange_frame(&rm, code_for(50e-6f, rm.active), 100e-6f);
+    smu_range_tick_ms(&rm, 0);
+    CHECK(rm.active == SMU_RANGE_1MA);
+    voltage_settle(&rm);
+    smu_range_set_current_autorange(&rm, false);
+    CHECK(smu_range_request(&rm, SMU_RANGE_100UA, SMU_RANGE_REASON_USER));
+    smu_range_tick_ms(&rm, 0);
+    voltage_settle(&rm);
+    for (unsigned i = 0; i < 5; ++i)
+        cal.current[i].gain = 0.001f;
+    CHECK(smu_measurement_set_calibration(&cal));
+    smu_range_set_current_autorange(&rm, true);
+    smu_range_current_autorange_frame(&rm, 8220000, 0);
+    smu_range_tick_ms(&rm, 0);
+    CHECK(rm.active == SMU_RANGE_1P5A && rm.reason == SMU_RANGE_REASON_OVERLOAD);
+}
+
 int main(void) {
+    test_calibrated_current_autorange();
     test_pa_impedance_sequence();
     test_input_impedance();
     test_voltage_autorange();

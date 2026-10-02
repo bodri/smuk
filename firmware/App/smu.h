@@ -38,6 +38,9 @@ smu_status_t smu_set_input_10m(bool enabled);
 /* Foreground only; default stale 20 ms, stopped fault 1 s, 10 errors/1 s. */
 smu_acquisition_config_t* smu_acquisition_config(void);
 
+/* Nominal precision integration time: 1, 8, 20, 50 or 100 ms. */
+smu_status_t smu_set_integration_ms(uint16_t milliseconds);
+
 /* Tuning knobs (thresholds, persistence, discard counts). */
 smu_range_config_t* smu_range_config(void);
 

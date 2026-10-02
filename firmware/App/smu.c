@@ -13,6 +13,8 @@ static smu_context_t g;
 static smu_range_manager_t ranges;
 static uint32_t last_ms;
 static smu_acquisition_t acquisition;
+static bool calibration_save_begin(void);
+static void calibration_save_end(void);
 
 static smu_acquisition_counters_t acquisition_counters(void) {
     const ads131m03_dma_status_t* s = ads131m03_dma_get_status();
@@ -52,6 +54,7 @@ bool smu_init(void) {
     smu_calibration_init();
     smu_cal_debug_init();
     smu_range_init(&ranges);
+    smu_calibration_set_save_hooks(calibration_save_begin, calibration_save_end);
     smu_range_disconnect_input(&ranges);
 
     if (!ads131m03_bringup_run(&ads_result)) {
@@ -111,8 +114,7 @@ static void process_frames(void) {
 
         if (g.state == SMU_STATE_NORMAL) {
             smu_range_current_autorange_frame(&ranges, f.ch0, smu_outputs.fast.current_A);
-            const smu_linear_cal_t cal = smu_calibration_get()->measurement.voltage[ranges.vactive];
-            const float voltage = smu_voltage_from_adc(smu_ads_code_to_volts(f.ch1), ranges.vactive) * cal.gain + cal.offset;
+            const float voltage = smu_measurement_voltage_from_code(f.ch1, ranges.vactive);
             smu_range_voltage_autorange_frame(&ranges, f.ch1, voltage, smu_outputs.fast.voltage_V);
         }
     }
@@ -153,6 +155,47 @@ static void update_measurement_context(void) {
     g.measurement_valid = g.state == SMU_STATE_NORMAL && ranges.measurement_valid && !smu_range_busy(&ranges) && smu_outputs.fast.valid;
 }
 
+static void discard_queued_frames(void) {
+    ads131m03_dma_frame_t dropped;
+    while (ads131m03_dma_pop(&dropped)) {
+    }
+}
+
+static void calibration_save_end(void) {
+    discard_queued_frames();
+    const uint32_t now = smu_port_millis();
+    smu_acquisition_resume(&acquisition, now, acquisition_counters());
+    last_ms = now;
+    smu_range_resume_measurement(&ranges);
+    smu_measurement_set_fresh(false);
+    g.acquisition_stale = true;
+    g.measurement_age_ms = 0;
+    update_measurement_context();
+    ads131m03_port_drdy_enable(true);
+}
+
+static bool calibration_save_begin(void) {
+    if (g.state != SMU_STATE_NORMAL || smu_range_busy(&ranges) || smu_cal_debug_active() || safety_hw_pa_requested())
+        return false;
+    ads131m03_port_drdy_enable(false);
+    smu_measurement_set_fresh(false);
+    smu_measurement_reset_filters();
+    smu_range_acquisition_gap(&ranges);
+    smu_console_acquisition_gap();
+    update_measurement_context();
+    ++g.acquisition_pause_count;
+    const uint32_t start = smu_port_millis();
+    /* Interrupts stay enabled so an in-flight SPI/DMA transfer can complete. */
+    while (ads131m03_port_spi_dma_busy() || ads_dma_status->dma_active) {
+        if (smu_port_millis() - start >= 10u) {
+            fault(SMU_FAULT_ADC);
+            return false; /* Keep acquisition gated; no Flash write was attempted. */
+        }
+    }
+    discard_queued_frames();
+    return true;
+}
+
 void smu_process(void) {
     if (g.state == SMU_STATE_POWER_UP)
         return;
@@ -162,9 +205,7 @@ void smu_process(void) {
     if (acquisition.gap) {
         /* Counter-only diagnostics cannot locate a gap within queued frames.
          * Conservatively drop the backlog; recovery requires new ADC progress. */
-        ads131m03_dma_frame_t dropped;
-        while (ads131m03_dma_pop(&dropped)) {
-        }
+        discard_queued_frames();
         smu_measurement_reset_filters();
         smu_range_acquisition_gap(&ranges);
         smu_console_acquisition_gap();
@@ -227,10 +268,9 @@ smu_status_t smu_set_input_10m(bool enabled) {
 smu_status_t smu_set_current_range(smu_current_range_t range) {
     if (g.state != SMU_STATE_NORMAL)
         return SMU_ERR_STATE;
-    g.current_autorange = false;
-    smu_range_set_current_autorange(&ranges, false);
     if (!smu_range_request(&ranges, range, SMU_RANGE_REASON_USER))
         return (ranges.error == SMU_RANGE_ERR_BAD_REQUEST) ? SMU_ERR_ARG : SMU_ERR_STATE;
+    smu_set_current_autorange(false);
     return SMU_OK;
 }
 
@@ -252,6 +292,18 @@ smu_status_t smu_set_voltage_range(smu_voltage_range_t range) {
     if (!smu_range_request_voltage(&ranges, range))
         return (ranges.error == SMU_RANGE_ERR_BAD_REQUEST) ? SMU_ERR_ARG : SMU_ERR_STATE;
     smu_set_voltage_autorange(false);
+    return SMU_OK;
+}
+
+smu_status_t smu_set_integration_ms(uint16_t milliseconds) {
+    if (milliseconds != 1u && milliseconds != 8u && milliseconds != 20u && milliseconds != 50u && milliseconds != 100u)
+        return SMU_ERR_ARG;
+    if (g.state != SMU_STATE_NORMAL || smu_range_busy(&ranges))
+        return SMU_ERR_STATE;
+    const uint16_t samples = (uint16_t)(milliseconds * (SMU_MEASUREMENT_SAMPLE_RATE_HZ / 1000u));
+    if (!smu_measurement_set_precision_samples(samples))
+        return SMU_ERR_ARG;
+    update_measurement_context();
     return SMU_OK;
 }
 

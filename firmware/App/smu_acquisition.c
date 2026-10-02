@@ -12,10 +12,25 @@ void smu_acquisition_init(smu_acquisition_t* s, uint32_t now, smu_acquisition_co
     s->stale = true;
 }
 
+void smu_acquisition_resume(smu_acquisition_t* s, uint32_t now, smu_acquisition_counters_t counters) {
+    s->previous = counters;
+    s->last_frame_ms = s->last_poll_ms = now;
+    s->age_ms = 0;
+    s->seen_frame = false;
+    s->stale = true;
+    s->gap = false;
+    if (now - s->window_start_ms >= s->cfg.error_window_ms) {
+        s->window_start_ms = now;
+        s->window_errors = 0;
+    }
+}
+
 void smu_acquisition_update(smu_acquisition_t* s, uint32_t now, smu_acquisition_counters_t counters) {
     uint32_t errors = counters.crc_errors - s->previous.crc_errors;
     errors = saturating_add(errors, counters.spi_errors - s->previous.spi_errors);
-    errors = saturating_add(errors, counters.busy - s->previous.busy);
+    /* Busy counts skipped DRDY triggers while DMA is active. It does not
+     * invalidate CRC-checked frames already delivered by the driver. Keep
+     * it diagnostic; stopped acquisition is detected by frame progress. */
     errors = saturating_add(errors, counters.overruns - s->previous.overruns);
     const bool delayed = now - s->last_poll_ms >= s->cfg.stale_ms;
     const bool was_stale = s->stale;

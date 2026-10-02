@@ -10,16 +10,10 @@
 /* RAM persistence stub: exercise the actual calibration application path. */
 static smu_cal_record_t stored;
 
-void smu_cal_record_finalize(smu_cal_record_t* record) {
-    (void)record;
-}
-
-bool smu_cal_record_validate(const smu_cal_record_t* record) {
-    return record != NULL;
-}
-
 bool smu_cal_store_save(const smu_cal_record_t* record) {
     stored = *record;
+    ++stored.sequence;
+    smu_cal_record_finalize(&stored);
     return true;
 }
 
@@ -129,7 +123,8 @@ static void test_measurement(void) {
     for (unsigned i = 0; i < 2; ++i)
         cal.voltage[i].gain = 3;
     cal.calbus.gain = 4;
-    smu_cal_record_t candidate = {0};
+    smu_cal_record_t candidate;
+    smu_cal_record_defaults(&candidate);
     candidate.measurement = cal;
     assert(smu_calibration_commit(&candidate));
     smu_measurement_outputs_t out;

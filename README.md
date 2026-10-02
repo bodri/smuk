@@ -131,7 +131,9 @@ The helper programs `build/smuk.elf` using STM32CubeProgrammer over SWD in under
 The ST-LINK USB connection provides a USART3 Virtual COM Port at **115200 baud,
 8N1, no flow control**. The firmware console supports measurement/raw queries,
 range selection, and manual calibration from externally applied references.
-Start with `HELP` or `PING`. `ACQ?` reports acquisition health; measurement
+Start with `HELP` or `PING`. Select precision windows with `INTEGRATION
+1MS|8MS|20MS|50MS|100MS`; precision readings become valid after the window fills.
+`CAL:SHOW?` reports calibration provenance, and captures report noise/drift. `ACQ?` reports acquisition health; measurement
 queries report freshness, settling, precision readiness, and channel clipping.
 Stale acquisition invalidates readings, and persistent failures latch an ADC fault. Current and voltage autorange are controlled
 independently with `AUTORANGE:I` and `AUTORANGE:V`; both default to enabled.

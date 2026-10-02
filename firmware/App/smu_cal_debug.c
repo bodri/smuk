@@ -150,7 +150,7 @@ void smu_cal_debug_process(uint32_t elapsed_ms) {
          * three-point calibration.
          */
         if (vcal_fit_ready && vcal_point_valid[0] && vcal_point_valid[1] && vcal_point_valid[2] && !vcal_test_fault && !cal_seq.fault) {
-            vcal_commit_ok = smu_calibration_vforce_commit(vcal_fit_gain, vcal_fit_offset);
+            vcal_commit_ok = smu_calibration_voltage_measurement_commit(vcal_fit_gain, vcal_fit_offset);
         }
     }
 

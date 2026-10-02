@@ -21,5 +21,8 @@ typedef struct {
 } smu_acquisition_t;
 
 void smu_acquisition_init(smu_acquisition_t* s, uint32_t now, smu_acquisition_counters_t counters);
+/* Expected foreground interruption: preserve configuration, diagnostics and
+ * latched faults, restart freshness timeout without counting a transport gap. */
+void smu_acquisition_resume(smu_acquisition_t* s, uint32_t now, smu_acquisition_counters_t counters);
 void smu_acquisition_update(smu_acquisition_t* s, uint32_t now, smu_acquisition_counters_t counters);
 #endif

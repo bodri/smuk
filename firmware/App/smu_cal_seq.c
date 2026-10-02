@@ -21,6 +21,7 @@ void smu_cal_seq_abort(smu_cal_seq_t* s) {
 
 void smu_cal_seq_init(smu_cal_seq_t* s) {
     *s = (smu_cal_seq_t){0};
+    s->capture_cfg = smu_cal_capture_default_config();
     s->acquisition_timeout_ms = SMU_CAL_SEQ_DEFAULT_TIMEOUT_MS;
     s->discard_required = 16;
     s->acquire_required = 64;
@@ -46,6 +47,10 @@ void smu_cal_seq_adc_frame(smu_cal_seq_t* s, int32_t target, int32_t calbus) {
             s->discarded++;
         }
     } else if ((s->state == CAL_SEQ_ACQUIRE) && (s->acquired < s->acquire_required)) {
+        if (!smu_cal_capture_add(&s->target_capture, target) || !smu_cal_capture_add(&s->bus_capture, calbus)) {
+            enter_fault(s);
+            return;
+        }
         s->target_sum += target;
         s->calbus_sum += calbus;
         s->acquired++;
@@ -107,6 +112,10 @@ void smu_cal_seq_tick_elapsed_ms(smu_cal_seq_t* s, uint32_t elapsed_ms) {
         break;
     case CAL_SEQ_DISCARD:
         if (s->discarded >= s->discard_required) {
+            if (!smu_cal_capture_init(&s->target_capture, s->acquire_required) || !smu_cal_capture_init(&s->bus_capture, s->acquire_required)) {
+                enter_fault(s);
+                break;
+            }
             s->acquired = 0;
             s->target_sum = 0;
             s->calbus_sum = 0;
@@ -117,6 +126,11 @@ void smu_cal_seq_tick_elapsed_ms(smu_cal_seq_t* s, uint32_t elapsed_ms) {
     case CAL_SEQ_ACQUIRE:
         if (s->acquired >= s->acquire_required) {
             if (s->acquire_required == 0u) {
+                enter_fault(s);
+                break;
+            }
+
+            if (!smu_cal_capture_finish(&s->target_capture, &s->capture_cfg, &s->target_quality) || !smu_cal_capture_finish(&s->bus_capture, &s->capture_cfg, &s->bus_quality)) {
                 enter_fault(s);
                 break;
             }

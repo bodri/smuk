@@ -12,6 +12,10 @@ bool smu_calibration_fit_linear(const float* nominal, const float* reference, si
 
 void smu_calibration_init(void);
 const smu_cal_record_t* smu_calibration_get(void);
+smu_cal_load_result_t smu_calibration_load_result(void);
+/* Optional foreground application guard. Begin must quiesce acquisition;
+ * end runs after every accepted begin, including write/readback failures. */
+void smu_calibration_set_save_hooks(bool (*begin)(void), void (*end)(void));
 bool smu_calibration_commit(const smu_cal_record_t* candidate);
 void smu_calibration_apply_to_measurement(void);
 float smu_calibration_vforce_command(float physical_volts);
@@ -34,6 +38,6 @@ bool smu_calibration_vcal_fit(const volatile float x[3], const volatile float y[
 
 /* Commits gain/offset as the 15V range voltage calibration, preserving the
  * rest of the currently active calibration record. */
-bool smu_calibration_vforce_commit(float gain, float offset);
+bool smu_calibration_voltage_measurement_commit(float gain, float offset);
 
 #endif

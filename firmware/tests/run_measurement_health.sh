@@ -10,5 +10,6 @@ trap 'rm -rf "$test_dir"' EXIT HUP INT TERM
     "$firmware_dir/App/smu_measurement.c" "$firmware_dir/App/smu_range.c" \
     "$firmware_dir/App/smu_calibration.c" "$firmware_dir/App/smu_iforce.c" \
     "$firmware_dir/Drivers/SMU/range_hw.c" "$firmware_dir/Drivers/SMU/safety_hw.c" \
+    "$firmware_dir/Storage/calibration_record.c" "$firmware_dir/App/smu_calibration_fit.c" \
     -lm -o "$test_dir/test_measurement_health"
 "$test_dir/test_measurement_health"

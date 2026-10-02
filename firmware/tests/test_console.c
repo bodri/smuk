@@ -52,6 +52,10 @@ void smu_get_measurement(smu_measurement_outputs_t* out) {
     smu_measurement_get_outputs(out);
 }
 
+smu_status_t smu_set_integration_ms(uint16_t ms) {
+    return smu_measurement_set_precision_samples(ms * 4u) ? SMU_OK : SMU_ERR_ARG;
+}
+
 smu_status_t smu_set_input_10m(bool value) {
     ctx.input_10m_requested = value;
     ctx.input_10m_active = value;
@@ -78,6 +82,10 @@ smu_status_t smu_set_voltage_range(smu_voltage_range_t range) {
     ctx.voltage_autorange = false;
     smu_measurement_set_voltage_range(range);
     return SMU_OK;
+}
+
+smu_cal_load_result_t smu_calibration_load_result(void) {
+    return SMU_CAL_LOAD_OK;
 }
 
 const smu_cal_record_t* smu_calibration_get(void) {
@@ -223,11 +231,30 @@ int main(void) {
     lost = true;
     send("PING\nPING\n");
     assert(strstr(output, "RX loss") && strstr(output, "PONG"));
+    send("INTEGRATION 20MS\n");
+    assert(strstr(output, "OK integration"));
+    assert(!strstr(output, "ERR"));
+    for (unsigned i = 0; i < 80; ++i)
+        sample(0);
+    send("MEAS?\n");
+    assert(strstr(output, "window=80/80") && strstr(output, "valid=1"));
+    send("INTEGRATION INVALID\n");
+    assert(strstr(output, "ERR"));
     send("CAL:BEGIN BUS\n");
+    send("CAL:CAPTURE 0\n");
+    ads131m03_dma_frame_t noisy = {0};
+    for (unsigned i = 0; i < 256; ++i) {
+        noisy.ch2 = i % 2 ? 100000 : -100000;
+        smu_console_frame(&noisy, ctx.range, ctx.vrange);
+    }
+    smu_console_process();
+    assert(strstr(output, "unstable capture") && !strstr(output, "OK POINT"));
+    send("CAL:POINTS?\n");
+    assert(strstr(output, "points=0"));
     point("0", 0);
     point("0", 0);
     send("CAL:FIT\n");
-    assert(strstr(output, "degenerate"));
+    assert(strstr(output, "insufficient point span"));
     send("CAL:RESET\n");
     send("CAL:BEGIN I\n");
     point("0", 0);

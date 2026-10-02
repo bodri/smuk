@@ -24,8 +24,9 @@ Receive loss and overlong lines discard input through a newline; resend the
 whole command. TX overflow is reported when queue space becomes available.
 Requests are not streamed continuously: query at a modest rate and wait for
 responses. `printf` still uses the BSP's blocking UART path; avoid mixing it
-with console traffic. Flash saves are synchronous and may interrupt acquisition;
-wait for the save response and fresh valid measurements afterward.
+with console traffic. Flash saves are synchronous and explicitly pause acquisition; wait for the
+save response and fresh valid measurements afterward. The ADC configuration
+and conversion clock continue unchanged during a save.
 
 ## Commands
 
@@ -35,19 +36,20 @@ wait for the save response and fresh valid measurements afterward.
 | `HELP` | Command summary |
 | `ECHO ON` / `ECHO OFF` | Device input echo; default off |
 | `STATUS?` | State, faults, ranges, autorange, validity, frame count, capture status, then a `QUALITY` line |
-| `ACQ?` | Acquisition age/staleness, gap count, CRC/SPI errors, busy events and overruns |
-| `MEAS?` | Precision filtered measurements in amperes/volts, ranges and validity |
+| `ACQ?` | Acquisition age/staleness, gap and intentional pause counts, CRC/SPI errors, busy events and overruns |
+| `MEAS?` | Precision measurements, validity, and populated/configured window size |
 | `RAW?` | Latest raw CH0/CH1/CH2 codes; these are not averaged |
 | `RANGE:I 1.5A` / `100MA` / `10MA` / `1MA` / `100UA` | Request fixed current range and disable autorange |
 | `RANGE:V 15V` / `6V` | Request fixed voltage range and disable voltage autorange |
 | `AUTORANGE ON` / `OFF` or `AUTORANGE:I ON` / `OFF` | Control current autorange |
 | `AUTORANGE:V ON` / `OFF` | Control voltage autorange independently |
 | `IMPEDANCE 10M` / `HIGHZ` | Select differential input loading; wait for `valid=1` |
-| `CAL:SHOW?` | Staged measurement coefficients, dirty flag and active Flash sequence |
+| `INTEGRATION 1MS` / `8MS` / `20MS` / `50MS` / `100MS` | Select precision integration window; default 8 ms |
+| `CAL:SHOW?` | Coefficients, dirty flag, Flash sequence, FLASH/DEFAULTS provenance and capture limits |
 | `CAL:BEGIN V` / `I` / `BUS` | Start a point set for the selected fixed range/channel |
 | `CAL:CAPTURE <reference>` | Average 256 fresh accepted raw ADC samples; reference in volts for V/BUS or amperes for I |
-| `CAL:POINTS?` | Show nominal readings and entered references |
-| `CAL:FIT` | Fit gain/offset and stage them; show per-point residuals |
+| `CAL:POINTS?` | Show readings, references and capture noise/drift |
+| `CAL:FIT` | Check point span, fit gain/offset and stage them; show residuals |
 | `CAL:SAVE` | Persist staged fits and apply them; requires a dirty record and stable fixed ranges |
 | `CAL:ABORT` | Stop capture and clear its point set; retain previously staged fits |
 | `CAL:RESET` | Stop capture, discard all staged fits and reload active calibration |
@@ -68,23 +70,25 @@ available for diagnostics when invalid; do not use those values for control.
 
 `I_clip` and `V_clip` report raw ADC magnitude at or above 8,220,000 codes
 (about 98% full scale), regardless of autorange. `I_overload` additionally
-includes the existing nominal-current overload threshold; `V_overload` reports
+includes the existing 105% current-range threshold applied to calibrated current; `V_overload` reports
 voltage ADC clipping. CALBUS clipping is reported independently as `BUS_clip`
 and does not invalidate otherwise usable I/V measurements. Precision CALBUS
 remains flagged until any clipped sample has left its averaging window.
 Clipped/overloaded I/V samples are excluded from filter history.
 
-`precision_ready=1` additionally requires the complete configured precision
-window. `valid` retains the existing partial-window behavior; future precision
-control must require both flags. Averaging lengths and measurement equations
-are unchanged.
+`MEAS? valid=1` and `precision_ready=1` require the complete configured precision
+window. `STATUS? valid` and `RAW? valid` describe the fast path, which is ready
+sooner. `MEAS? window=<populated>/<configured>` reports progress explicitly.
+Precision values during warm-up remain available but invalid. Integration
+changes, range switches, acquisition gaps and calibration application reset
+history. Conversion equations remain unchanged.
 
 The foreground health monitor uses the existing ADC counters without changing
 SPI/DMA configuration or ISR behavior. Defaults are:
 
 - No clean acquisition progress for 20 ms: invalidate readings and reset filters
   and autorange persistence. New clean frames recover automatically.
-- CRC/SPI errors, DMA-busy events, ring overruns, or a foreground monitoring pause
+- CRC/SPI errors, ring overruns, or a foreground monitoring pause
   of at least 20 ms: discard queued frames of uncertain continuity and reset
   measurement history. Active manual captures are discarded; an active debugger
   calibration sequence aborts with a calibration fault.
@@ -92,11 +96,75 @@ SPI/DMA configuration or ISR behavior. Defaults are:
   fixed 1-second monitoring window: latch an ADC fault, request PA disable, and
   disconnect the 10 MΩ load. Reboot is currently required to clear the fault.
 
-`ACQ?` exposes `age_ms`, `stale`, `gaps`, `crc`, `spi`, `busy`, and `overruns`.
+`ACQ?` exposes `age_ms`, `stale`, `gaps`, `pauses`, `crc`, `spi`, `busy`, and `overruns`.
+DMA-busy events count skipped DRDY triggers while a transfer is active. They
+remain diagnostic and do not alone discard clean frames or latch a fault.
+A rising busy count can indicate reduced sampling throughput; verify the actual
+accepted sample rate before relying on the nominal integration times for mains rejection.
 Age is measured from foreground observation of clean ADC progress, not a
 hardware timestamp for each frame. The monitor conservatively drops queued
 frames after a long foreground pause. Thresholds can be tuned through
 `smu_acquisition_config()`; keep all configured limits positive.
+
+## Precision integration
+
+Select `INTEGRATION 1MS`, `8MS`, `20MS`, `50MS`, or `100MS`. At the nominal
+4 kSPS board rate these use 4, 32, 80, 200, and 400 samples respectively.
+The default remains 8 ms. Fast filtering and ADC registers are unchanged.
+Running sums use compensated arithmetic to limit accumulation drift.
+
+At exactly 4 kSPS, 20 ms covers one 50 Hz cycle, 50 ms covers three 60 Hz
+cycles, and 100 ms covers five 50 Hz or six 60 Hz cycles. Verify the actual
+sample-clock rate and interference frequency on the board; rejection depends
+on their agreement with the selected window. These are sample-based windows,
+not a line-synchronized ADC mode. Integration changes are rejected during a
+capture and clear its point set while preserving previously staged fits.
+After selecting a window, wait for `MEAS? valid=1` before trusting precision
+readings. This setting is volatile and returns to 8 ms after reset.
+
+## Calibration quality and persistence
+
+`CAL:SHOW? source=FLASH` means a valid record was loaded; `DEFAULTS` means the
+instrument is using nominal coefficients. FLASH does not certify that every
+range has been calibrated: the version-1 record still has no per-range provenance.
+Headers, CRC algorithm, record format and the two Flash slots are unchanged.
+Records require finite positive gains, finite offsets, and representable
+conversion results. Invalid records are excluded from slot selection; an older
+valid slot is used if available, otherwise defaults are applied. Invalid
+candidates are rejected before Flash is touched.
+
+Every capture reports RMS sample noise, last-half minus first-half mean drift,
+and sample span. `*_nominal` values are in the target channel's uncalibrated
+amperes/volts; raw-code metrics are also reported so small current noise remains
+visible despite decimal display rounding. Defaults reject RMS noise above
+4096 ADC codes or absolute half-to-half drift above 8192 codes. These are initial
+bench limits (about 0.049% and 0.098% of positive ADC full scale), not accuracy
+specifications. Inspect them and tune with `smu_console_calibration_config()`
+when characterizing the board. Debugger acquisition uses the same checks,
+with limits in `cal_seq.capture_cfg`, on both target and CALBUS channels.
+
+A failed capture does not add a point. `CAL:FIT` reports nominal/reference spans
+and requires nominal span at least 64 ADC codes and 20 times the worst captured
+RMS noise. It reports each residual without automatically asserting fit accuracy.
+Console and debugger paths share the finite, positive-gain fitter. Review
+residuals and verify against references not used for fitting.
+
+Before saving, the application disables new DRDY-triggered DMA starts, waits
+up to 10 ms for an in-flight transfer, discards the queued data, and invalidates
+measurements. IRQ behavior is unchanged and interrupts remain enabled. After
+write/readback success or failure, it discards queued data again, restarts health
+monitoring from the expected interruption, and resumes with 40 discarded frames.
+The selected ranges, impedance and integration window are retained. Fast
+measurements then recover; precision additionally waits for a full window.
+Intentional saves increment `ACQ? pauses` rather than creating transport gaps.
+A DMA-quiesce timeout prevents the write, latches an ADC fault and leaves new
+acquisition disabled until reboot. Saves are rejected while ranges are busy,
+a calibration sequence is active, or the PA is requested.
+
+A failed write/readback leaves active RAM coefficients unchanged. The new
+record must pass semantic/CRC checks, advance sequence, and match the requested
+payload before application. If a write succeeds but its reload cannot be
+confirmed, a reboot may load that persisted record; recheck `CAL:SHOW?`.
 
 ## Input impedance
 
@@ -154,15 +222,17 @@ for manual calibration.
 5. Repeat at several distinct points. At least two points are required; up to
    eight are supported. Include zero and points spread across the usable range,
    and negative points when practical. Acquisition has a 2-second timeout and
-   rejects readings near ADC clipping. A failed capture does not add a point.
+   rejects clipping, excessive noise and drift. A failed capture does not add a point.
 6. Run `CAL:POINTS?` and `CAL:FIT`. The fit is `reference = gain * nominal + offset`.
-   Review residuals. The fit has not changed active coefficients or Flash yet.
+   Review capture quality, point span and residuals. The fit has not changed active
+   coefficients or Flash yet.
 7. Repeat for other ranges using `CAL:BEGIN ...`; previously fitted coefficients
    remain staged. Voltage coefficients are separate for 15 V and 6 V; current
    coefficients are separate for all five current ranges; BUS has one pair.
 8. Review `CAL:SHOW?`, then explicitly send `CAL:SAVE`. Only fitted measurement
    entries are updated; source calibration and other record fields are preserved.
    A changed active calibration generation rejects the save; reset and refit.
+   Wait for fresh `MEAS? valid=1` after the save before verification.
 9. Verify at independent points not used in the fit, reboot, and verify again.
    `CAL:RESET` discards unsaved edits; reset/power loss also loses staged edits.
 
@@ -195,8 +265,18 @@ sh firmware/tests/run_console.sh
 sh firmware/tests/run_autorange.sh
 sh firmware/tests/run_calibration_state.sh
 sh firmware/tests/run_measurement_health.sh
+sh firmware/tests/run_precision.sh
+sh firmware/tests/run_calibration_quality.sh
 ```
 
-Host tests validate command parsing, staged fitting, save failures, capture
-errors, and UART queue behavior. Board verification is still required for the
+Host tests validate command parsing, precision-window warm-up and simulated
+mains rejection, calibration semantics and capture quality, acquisition pauses
+and save failure recovery, autorange, and UART queue behavior. Board verification is still required for the
 actual USB/UART connection and acquisition performance under console traffic.
+
+Before PA integration, verify both polarities and all current/voltage ranges on
+the board. Check range overlap with independent references, settling in 10M and
+HIGHZ modes at low and high source impedances, measured sample rate, noise with
+each integration setting, and recovery after saving and rebooting. The current
+8–40 frame range allowances and 40-frame impedance/resume allowances remain
+initial values until these measurements establish their margins.

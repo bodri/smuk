@@ -3,7 +3,9 @@
 #include "range_hw_port.h"
 #include "safety_hw.h"
 #include "smu.h"
+#include "smu_calibration.h"
 #include <assert.h>
+#include <math.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -12,13 +14,22 @@ static ads131m03_dma_status_t adc;
 static ads131m03_dma_frame_t queued[128];
 static unsigned head, tail, capture_gaps;
 static bool gates[6], v6, input_10m;
+static bool drdy_enabled, force_busy, saved_record, save_failure, readback_failure;
+static unsigned storage_writes;
+static smu_cal_record_t stored_record;
 
 uint32_t smu_port_millis(void) {
     return now;
 }
 
+bool ads131m03_port_spi_dma_busy(void) {
+    if (force_busy)
+        ++now;
+    return force_busy;
+}
+
 void ads131m03_port_drdy_enable(bool enabled) {
-    (void)enabled;
+    drdy_enabled = enabled;
 }
 
 bool ads131m03_bringup_run(ads131m03_bringup_result_t* out) {
@@ -70,26 +81,27 @@ void smu_cal_store_init(void) {
 }
 
 smu_cal_load_result_t smu_cal_store_load(smu_cal_record_t* out) {
-    memset(out, 0, sizeof(*out));
-    for (unsigned i = 0; i < 5; ++i)
-        out->measurement.current[i].gain = 1;
-    for (unsigned i = 0; i < 2; ++i)
-        out->measurement.voltage[i].gain = 1;
-    out->measurement.calbus.gain = 1;
+    if (readback_failure)
+        return SMU_CAL_LOAD_INVALID;
+    if (saved_record) {
+        *out = stored_record;
+        return SMU_CAL_LOAD_OK;
+    }
+    smu_cal_record_defaults(out);
     return SMU_CAL_LOAD_DEFAULTS;
 }
 
-void smu_cal_record_finalize(smu_cal_record_t* r) {
-    (void)r;
-}
-
-bool smu_cal_record_validate(const smu_cal_record_t* r) {
-    return r != NULL;
-}
-
 bool smu_cal_store_save(const smu_cal_record_t* r) {
-    (void)r;
-    return false;
+    assert(!drdy_enabled && !adc.dma_active && head == tail);
+    ++storage_writes;
+    now += 1500; /* expected pause exceeds the normal stopped-acquisition limit */
+    if (save_failure)
+        return false;
+    stored_record = *r;
+    ++stored_record.sequence;
+    smu_cal_record_finalize(&stored_record);
+    saved_record = true;
+    return true;
 }
 
 void smu_cal_debug_init(void) {
@@ -143,7 +155,8 @@ static smu_measurement_outputs_t output(void) {
 }
 
 static void boot(void) {
-    now = capture_gaps = 0;
+    now = capture_gaps = storage_writes = 0;
+    saved_record = force_busy = save_failure = readback_failure = false;
     safety_hw_init_safe();
     assert(smu_init());
     smu_set_current_autorange(false);
@@ -245,7 +258,7 @@ static void test_gap_and_errors(void) {
     ++adc.dma_busy_count;
     ++now;
     smu_process();
-    assert(!output().fast.valid && smu_get_context()->adc_busy_count == 1);
+    assert(output().fast.valid && smu_get_context()->adc_busy_count == 1);
     sample(1000, 2000, 1000);
     ++adc.spi_error_count;
     ++now;
@@ -258,7 +271,7 @@ static void test_gap_and_errors(void) {
     assert(head == tail && !output().fast.valid);
     sample(1000, 2000, 1000);
     assert(output().fast.valid);
-    adc.crc_error_count += 6;
+    adc.crc_error_count += 7;
     ++now;
     smu_process(); /* total ten transport errors */
     assert(smu_get_context()->faults & SMU_FAULT_ADC);
@@ -280,6 +293,68 @@ static void test_autorange_gap_persistence(void) {
     sample(1000, 1000, 1000);
     assert(smu_get_context()->vrange == SMU_VRANGE_6V);
     assert(!output().fast.valid && output().fast.range_transition);
+}
+
+static void test_flash_save_interruptions(void) {
+    boot();
+    assert(smu_set_integration_ms(20) == SMU_OK);
+    for (unsigned i = 0; i < 80; ++i)
+        sample(1000, 1000, 1000);
+    assert(output().precision.valid);
+    smu_cal_record_t candidate = *smu_calibration_get();
+    candidate.measurement.voltage[0].gain = 1.1f;
+    enqueue(1000, 7000000, 1000); /* unread pre-save sample must be discarded */
+    assert(smu_calibration_commit(&candidate));
+    assert(storage_writes == 1 && head == tail && drdy_enabled);
+    assert(!output().fast.valid && !output().precision.valid);
+    assert(output().precision_window == 80 && smu_get_context()->acquisition_pause_count == 1);
+    smu_process();
+    assert(!smu_get_context()->faults && smu_get_context()->acquisition_stale);
+    for (unsigned i = 0; i < 40; ++i)
+        sample(1000, 2000, 1000);
+    assert(!output().fast.valid);
+    sample(1000, 2000, 1000);
+    assert(output().fast.valid && !output().precision.valid);
+    assert(fabsf(output().fast.voltage_V - 1.1f * smu_voltage_from_adc(smu_ads_code_to_volts(2000), SMU_VRANGE_15V)) < 1e-7f);
+    for (unsigned i = 0; i < 79; ++i)
+        sample(1000, 2000, 1000);
+    assert(output().precision.valid && !smu_get_context()->faults);
+    assert(!smu_get_context()->acquisition_gap_count);
+    candidate = *smu_calibration_get();
+    candidate.measurement.voltage[0].gain = 1.2f;
+    save_failure = true;
+    assert(!smu_calibration_commit(&candidate));
+    assert(drdy_enabled && smu_calibration_get()->measurement.voltage[0].gain == 1.1f);
+    for (unsigned i = 0; i < 41; ++i)
+        sample(1000, 2000, 1000);
+    assert(output().fast.valid && !smu_get_context()->faults);
+    save_failure = false;
+    readback_failure = true;
+    assert(!smu_calibration_commit(&candidate));
+    assert(drdy_enabled && smu_calibration_get()->measurement.voltage[0].gain == 1.1f);
+    readback_failure = false;
+    for (unsigned i = 0; i < 41; ++i)
+        sample(1000, 2000, 1000);
+    assert(output().fast.valid && !smu_get_context()->faults);
+    force_busy = true;
+    const unsigned writes_before = storage_writes;
+    assert(!smu_calibration_commit(&candidate));
+    assert(storage_writes == writes_before && !drdy_enabled);
+    assert(smu_get_context()->faults & SMU_FAULT_ADC);
+    assert(!output().fast.valid);
+    force_busy = false;
+}
+
+static void test_failed_range_preserves_autorange(void) {
+    boot();
+    smu_set_current_autorange(true);
+    assert(smu_set_current_range(SMU_RANGE_NONE) == SMU_ERR_ARG);
+    assert(smu_get_context()->current_autorange);
+    assert(smu_set_current_range(SMU_RANGE_10MA) == SMU_OK);
+    smu_set_current_autorange(true);
+    assert(smu_set_current_range(SMU_RANGE_1MA) == SMU_ERR_STATE);
+    assert(smu_get_context()->current_autorange);
+    assert(!output().fast.valid);
 }
 
 static void test_no_initial_frames(void) {
@@ -313,6 +388,20 @@ static void test_health_wrap_and_windows(void) {
     smu_acquisition_update(&h, 11, counters);
     assert(h.window_errors == 1 && !h.fault);
     smu_acquisition_init(&h, 0, (smu_acquisition_counters_t){0});
+    counters = (smu_acquisition_counters_t){0};
+    for (uint32_t t = 1; t <= 2000; ++t) {
+        ++counters.frames;
+        counters.busy += 100;
+        smu_acquisition_update(&h, t, counters);
+        assert(!h.stale && !h.gap && !h.fault && h.window_errors == 0);
+    }
+    /* Busy interrupts without completed frames still fault as stopped ADC. */
+    for (uint32_t t = 2001; t <= 3000; ++t) {
+        ++counters.busy;
+        smu_acquisition_update(&h, t, counters);
+    }
+    assert(h.stale && h.fault);
+    smu_acquisition_init(&h, 0, (smu_acquisition_counters_t){0});
     counters = (smu_acquisition_counters_t){.frames = 1, .crc_errors = 9};
     smu_acquisition_update(&h, 1, counters);
     assert(!h.fault);
@@ -330,6 +419,9 @@ int main(void) {
     test_stale_and_recovery();
     test_gap_and_errors();
     test_autorange_gap_persistence();
+    test_flash_save_interruptions();
+    test_failed_range_preserves_autorange();
+    saved_record = false;
     test_no_initial_frames();
     test_health_wrap_and_windows();
     puts("Measurement quality and acquisition health tests passed.");

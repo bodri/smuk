@@ -53,7 +53,7 @@ typedef struct {
     uint32_t faults;
     uint32_t frame_count;
     uint32_t range_switch_count;
-    uint32_t measurement_age_ms, acquisition_gap_count;
+    uint32_t measurement_age_ms, acquisition_gap_count, acquisition_pause_count;
     uint32_t adc_crc_errors, adc_spi_errors, adc_busy_count, adc_overruns;
     bool acquisition_stale, measurement_fresh, measurement_settled, precision_ready;
     bool current_clipped, voltage_clipped, calbus_clipped;
