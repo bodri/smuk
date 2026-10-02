@@ -1,5 +1,7 @@
 #include "range_hw.h"
 #include "range_hw_port.h"
+#include "safety_hw.h"
+#include "smu_instrument.h"
 #include "smu_measurement.h"
 #include "smu_range.h"
 #include <stdio.h>
@@ -7,7 +9,15 @@
 
 /* Fake GPIO port: logical switch states. */
 static bool gate[6];
-static bool v6;
+static bool v6, input_10m;
+
+void range_hw_port_input_10m(bool on) {
+    input_10m = on;
+}
+
+bool range_hw_port_input_10m_is_on(void) {
+    return input_10m;
+}
 
 void range_hw_port_current_gate(smu_current_range_t r, bool on) {
     if (r >= SMU_RANGE_1P5A && r <= SMU_RANGE_100UA)
@@ -254,7 +264,91 @@ static void test_voltage_autorange(void) {
     }
 }
 
+static void test_input_impedance(void) {
+    smu_range_manager_t rm;
+    safety_hw_init_safe();
+    boot(&rm);
+    smu_range_disconnect_input(&rm);
+    voltage_settle(&rm);
+    CHECK(!input_10m && !smu_range_busy(&rm));
+    CHECK(smu_range_request_input_10m(&rm, true));
+    CHECK(!input_10m && smu_range_busy(&rm)); /* queued, not yet applied */
+    smu_range_tick_ms(&rm, 0);
+    CHECK(input_10m && rm.input_10m_active && !rm.measurement_valid);
+    CHECK(!safety_hw_request_pa_enable());
+    CHECK(!safety_hw_pa_requested());
+    int dropped = 0;
+    while (!smu_range_accept_frame(&rm))
+        dropped++;
+    CHECK(dropped == 40 && rm.measurement_valid);
+    smu_range_inhibit_input_10m(&rm, true);
+    smu_range_tick_ms(&rm, 0);
+    CHECK(!input_10m && rm.input_10m_requested);
+    CHECK(!smu_range_request_input_10m(&rm, true));
+    voltage_settle(&rm);
+    CHECK(safety_hw_request_pa_enable());
+    smu_range_inhibit_input_10m(&rm, false);
+    smu_range_tick_ms(&rm, 1);
+    CHECK(!input_10m); /* PA request overrides desired 10M */
+    CHECK(!smu_range_request_input_10m(&rm, true));
+    safety_hw_disable_pa();
+    smu_range_tick_ms(&rm, 1);
+    CHECK(!input_10m); /* output-decay allowance before reconnection */
+    smu_range_tick_ms(&rm, 9);
+    CHECK(input_10m); /* restore only after PA disable and settling */
+    voltage_settle(&rm);
+    CHECK(smu_range_request_input_10m(&rm, false));
+    smu_range_tick_ms(&rm, 0);
+    voltage_settle(&rm);
+    smu_range_inhibit_input_10m(&rm, true);
+    CHECK(safety_hw_request_pa_enable());
+    safety_hw_disable_pa();
+    smu_range_inhibit_input_10m(&rm, false);
+    smu_range_tick_ms(&rm, 1);
+    CHECK(!input_10m); /* HIGHZ persists across PA transitions */
+    CHECK(smu_range_request_input_10m(&rm, true));
+    smu_range_tick_ms(&rm, 0);
+    smu_range_disconnect_input(&rm);
+    voltage_settle(&rm);
+    smu_range_tick_ms(&rm, 1);
+    CHECK(!input_10m && !rm.input_10m_requested);
+}
+
+static void test_pa_impedance_sequence(void) {
+    smu_instrument_t s;
+    safety_hw_init_safe();
+    smu_instrument_init(&s);
+    CHECK(!input_10m);
+    s.power_good = s.watchdog_ok = s.adc_ok = s.dac_ok = s.calibration_ok = true;
+    smu_instrument_tick_1ms(&s, 0, false);
+    smu_instrument_tick_1ms(&s, 0, false);
+    CHECK(s.state == SMU_STATE_OUTPUT_OFF);
+    CHECK(smu_range_request_input_10m(&s.range, true));
+    smu_instrument_tick_1ms(&s, 0, false);
+    voltage_settle(&s.range);
+    CHECK(input_10m);
+    CHECK(smu_instrument_output_enable(&s));
+    smu_instrument_tick_1ms(&s, 0, false);
+    CHECK(!input_10m && !safety_hw_pa_requested());
+    voltage_settle(&s.range);
+    smu_instrument_tick_1ms(&s, 0, false);
+    CHECK(safety_hw_pa_requested() && s.state == SMU_STATE_NORMAL);
+    smu_instrument_output_disable(&s);
+    CHECK(!safety_hw_pa_requested());
+    smu_instrument_tick_1ms(&s, 0, false);
+    CHECK(!input_10m);
+    for (unsigned ms = 1; ms < 10; ++ms)
+        smu_instrument_tick_1ms(&s, 0, false);
+    CHECK(input_10m && !s.range.measurement_valid);
+    voltage_settle(&s.range);
+    s.hw_fault = true;
+    smu_instrument_tick_1ms(&s, 0, false);
+    CHECK(s.state == SMU_STATE_FAULT && !input_10m);
+}
+
 int main(void) {
+    test_pa_impedance_sequence();
+    test_input_impedance();
     test_voltage_autorange();
     test_boot_and_settle();
     test_down_jumps_directly();

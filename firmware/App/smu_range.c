@@ -1,5 +1,6 @@
 #include "smu_range.h"
 #include "range_hw.h"
+#include "safety_hw.h"
 #include "smu_iforce.h"
 #include "smu_measurement.h"
 #include <math.h>
@@ -42,6 +43,7 @@ static void reset_voltage_autorange(smu_range_manager_t* rm) {
 }
 
 static void enter_fault(smu_range_manager_t* rm) {
+    smu_range_disconnect_input(rm);
     range_hw_all_off();
     rm->error = SMU_RANGE_ERR_GATE_INVALID;
     rm->tx_state = SMU_RANGE_TX_FAULT;
@@ -78,6 +80,18 @@ static void apply_switch(smu_range_manager_t* rm) {
             discard = rm->cfg.vrange_discard_frames;
     }
 
+    if (rm->impedance_pending) {
+        const bool connect = rm->input_10m_requested && !rm->pa_inhibited && !rm->pa_off_wait_ms && !safety_hw_pa_requested();
+        range_hw_input_10m(connect);
+        rm->input_10m_active = range_hw_input_10m_is_on();
+        if (rm->input_10m_active != connect) {
+            enter_fault(rm);
+            return;
+        }
+        rm->impedance_pending = false;
+        if (rm->cfg.impedance_discard_frames > discard)
+            discard = rm->cfg.impedance_discard_frames;
+    }
     smu_measurement_set_range_transition(true);
     smu_measurement_reset_filters();
     rm->discard_left = discard;
@@ -109,14 +123,37 @@ void smu_range_init(smu_range_manager_t* rm) {
     rm->cfg.current_discard_frames[SMU_RANGE_1MA] = 16u;
     rm->cfg.current_discard_frames[SMU_RANGE_100UA] = 40u;
     rm->cfg.vrange_discard_frames = 40u;
+    rm->cfg.impedance_discard_frames = 40u;
+    rm->cfg.pa_off_settle_ms = 10u;
     rm->cfg.voltage_up_V = 6.2f;
     rm->cfg.voltage_down_V = 5.0f;
     rm->cfg.voltage_up_confirm_frames = 2u;
     rm->cfg.voltage_down_persist_ms = 100u;
 }
 
+bool smu_range_request_input_10m(smu_range_manager_t* rm, bool enabled) {
+    if (rm->tx_state == SMU_RANGE_TX_FAULT || (enabled && (rm->pa_inhibited || safety_hw_pa_requested())))
+        return false;
+    rm->input_10m_requested = enabled;
+    rm->impedance_pending = enabled != rm->input_10m_active;
+    return true;
+}
+
+void smu_range_inhibit_input_10m(smu_range_manager_t* rm, bool inhibited) {
+    if (rm->pa_inhibited && !inhibited)
+        rm->pa_off_wait_ms = rm->cfg.pa_off_settle_ms;
+    rm->pa_inhibited = inhibited;
+}
+
+void smu_range_disconnect_input(smu_range_manager_t* rm) {
+    range_hw_input_10m(false);
+    rm->input_10m_active = false;
+    rm->input_10m_requested = false;
+    rm->impedance_pending = false;
+}
+
 bool smu_range_busy(const smu_range_manager_t* rm) {
-    return rm->tx_state != SMU_RANGE_TX_IDLE || rm->vpending;
+    return rm->tx_state != SMU_RANGE_TX_IDLE || rm->vpending || rm->impedance_pending;
 }
 
 bool smu_range_request(smu_range_manager_t* rm, smu_current_range_t target, smu_range_reason_t reason) {
@@ -256,7 +293,15 @@ void smu_range_tick_ms(smu_range_manager_t* rm, uint32_t elapsed_ms) {
     if (rm->tx_state == SMU_RANGE_TX_FAULT)
         return;
 
-    if (rm->tx_state == SMU_RANGE_TX_PENDING || (rm->tx_state == SMU_RANGE_TX_IDLE && rm->vpending)) {
+    if (rm->pa_inhibited || safety_hw_pa_requested())
+        rm->pa_off_wait_ms = rm->cfg.pa_off_settle_ms;
+    else if (elapsed_ms >= rm->pa_off_wait_ms)
+        rm->pa_off_wait_ms = 0;
+    else
+        rm->pa_off_wait_ms -= elapsed_ms;
+    const bool connect = rm->input_10m_requested && !rm->pa_inhibited && !rm->pa_off_wait_ms && !safety_hw_pa_requested();
+    rm->impedance_pending = connect != rm->input_10m_active;
+    if (rm->tx_state == SMU_RANGE_TX_PENDING || (rm->tx_state == SMU_RANGE_TX_IDLE && (rm->vpending || rm->impedance_pending))) {
         apply_switch(rm);
         return;
     }

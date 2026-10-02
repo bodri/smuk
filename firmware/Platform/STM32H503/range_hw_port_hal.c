@@ -29,6 +29,15 @@ bool range_hw_port_current_gate_is_on(smu_current_range_t range) {
     return p && (HAL_GPIO_ReadPin(p->port, p->pin) == GPIO_PIN_RESET);
 }
 
+/* MV_ON is active high: connects R26 between SENSE+ and SENSE-. */
+void range_hw_port_input_10m(bool on) {
+    HAL_GPIO_WritePin(MV_ON_GPIO_Port, MV_ON_Pin, on ? GPIO_PIN_SET : GPIO_PIN_RESET);
+}
+
+bool range_hw_port_input_10m_is_on(void) {
+    return HAL_GPIO_ReadPin(MV_ON_GPIO_Port, MV_ON_Pin) == GPIO_PIN_SET;
+}
+
 /* VRANGE is active high: SET selects the 6 V range, RESET the 15 V range. */
 void range_hw_port_voltage_6v(bool on) {
     HAL_GPIO_WritePin(VRANGE_GPIO_Port, VRANGE_Pin, on ? GPIO_PIN_SET : GPIO_PIN_RESET);

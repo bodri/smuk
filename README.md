@@ -133,6 +133,8 @@ The ST-LINK USB connection provides a USART3 Virtual COM Port at **115200 baud,
 range selection, and manual calibration from externally applied references.
 Start with `HELP` or `PING`. Current and voltage autorange are controlled
 independently with `AUTORANGE:I` and `AUTORANGE:V`; both default to enabled.
+Input loading defaults to 10 MΩ between the sense terminals; use `IMPEDANCE HIGHZ`
+to disconnect it or `IMPEDANCE 10M` to restore it.
 Voltage starts at 15 V and autorange switches up at 6.2 V magnitude and down at
 5.0 V after 100 ms. Disable both autoranges during manual calibration.
 

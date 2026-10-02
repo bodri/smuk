@@ -8,6 +8,8 @@
  * polarity. Read-back reports the actual pin level, not a RAM shadow. */
 void range_hw_port_current_gate(smu_current_range_t range, bool on);
 bool range_hw_port_current_gate_is_on(smu_current_range_t range);
+void range_hw_port_input_10m(bool on);
+bool range_hw_port_input_10m_is_on(void);
 void range_hw_port_voltage_6v(bool on);
 bool range_hw_port_voltage_6v_is_on(void);
 

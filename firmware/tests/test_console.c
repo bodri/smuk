@@ -52,6 +52,12 @@ void smu_get_measurement(smu_measurement_outputs_t* out) {
     smu_measurement_get_outputs(out);
 }
 
+smu_status_t smu_set_input_10m(bool value) {
+    ctx.input_10m_requested = value;
+    ctx.input_10m_active = value;
+    return SMU_OK;
+}
+
 void smu_set_current_autorange(bool value) {
     ctx.current_autorange = value;
 }
@@ -128,6 +134,14 @@ int main(void) {
     assert(strstr(output, "serial ready"));
     send("ping\r\n");
     assert(strstr(output, "PONG"));
+    send("IMPEDANCE 10M\n");
+    assert(ctx.input_10m_requested && ctx.input_10m_active);
+    send("STATUS?\n");
+    assert(strstr(output, "impedance_requested=10M impedance=10M"));
+    send("IMPEDANCE HIGHZ\n");
+    assert(!ctx.input_10m_requested && !ctx.input_10m_active);
+    send("IMPEDANCE INVALID\n");
+    assert(strstr(output, "ERR"));
     send("AUTORANGE:V ON\n");
     assert(ctx.voltage_autorange && ctx.current_autorange);
     send("STATUS?\n");
@@ -146,6 +160,10 @@ int main(void) {
     assert(!ctx.current_autorange);
     send("CAL:BEGIN V\n");
     assert(strstr(output, "OK manual"));
+    ctx.input_10m_active = ctx.input_10m_requested = true;
+    send("CAL:CAPTURE 0\n");
+    assert(strstr(output, "ERR"));
+    ctx.input_10m_active = ctx.input_10m_requested = false;
     send("CAL:CAPTURE NAN\n");
     assert(strstr(output, "ERR"));
     send("CAL:CAPTURE 1E999\n");
@@ -176,6 +194,8 @@ int main(void) {
     assert(strstr(output, "busy"));
     send("AUTORANGE:V ON\n");
     assert(strstr(output, "busy") && !ctx.voltage_autorange);
+    send("IMPEDANCE 10M\n");
+    assert(strstr(output, "busy") && !ctx.input_10m_active);
     now += 2000;
     smu_console_process();
     assert(strstr(output, "timeout"));

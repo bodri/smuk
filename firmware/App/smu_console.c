@@ -22,6 +22,7 @@ static enum { TARGET_NONE, TARGET_V, TARGET_I, TARGET_BUS } target;
 
 static smu_current_range_t current_range;
 static smu_voltage_range_t voltage_range;
+static bool capture_input_10m;
 static float x[POINTS], y[POINTS];
 static unsigned points, acquired;
 static int64_t code_sum;
@@ -68,12 +69,12 @@ static bool stable(void) {
     smu_measurement_outputs_t out;
     smu_get_measurement(&out);
     return ctx->state == SMU_STATE_NORMAL && ctx->measurement_valid && !ctx->current_autorange && !ctx->voltage_autorange && out.fast.valid && !out.fast.overload && !out.fast.range_transition &&
-           out.fast.range == ctx->range && out.fast.vrange == ctx->vrange;
+           out.fast.range == ctx->range && out.fast.vrange == ctx->vrange && ctx->input_10m_requested == ctx->input_10m_active;
 }
 
 static bool same_range(void) {
     const smu_context_t* ctx = smu_get_context();
-    return ctx->range == current_range && ctx->vrange == voltage_range;
+    return ctx->range == current_range && ctx->vrange == voltage_range && ctx->input_10m_requested == capture_input_10m && ctx->input_10m_active == capture_input_10m;
 }
 
 static void show_cal(void) {
@@ -165,7 +166,8 @@ static void command(char* text) {
     if (!arg)
         arg = "";
     if (!strcmp(text, "HELP") && !*arg) {
-        reply("STATUS? MEAS? RAW? CAL:SHOW? ECHO ON|OFF\r\nRANGE:I 1.5A|100MA|10MA|1MA|100UA; RANGE:V 15V|6V; AUTORANGE[:I|:V] ON|OFF\r\nCAL:BEGIN V|I|BUS; CAL:CAPTURE <reference in V/A>; CAL:FIT; "
+        reply("STATUS? MEAS? RAW? CAL:SHOW? ECHO ON|OFF; IMPEDANCE 10M|HIGHZ\r\nRANGE:I 1.5A|100MA|10MA|1MA|100UA; RANGE:V 15V|6V; AUTORANGE[:I|:V] ON|OFF\r\nCAL:BEGIN V|I|BUS; CAL:CAPTURE "
+              "<reference in V/A>; CAL:FIT; "
               "CAL:POINTS?\r\nCAL:SAVE; CAL:RESET; CAL:ABORT; PING\r\n");
     } else if (!strcmp(text, "PING") && !*arg)
         reply("PONG\r\n");
@@ -174,8 +176,9 @@ static void command(char* text) {
         reply("OK\r\n");
     } else if (!strcmp(text, "STATUS?") && !*arg) {
         const smu_context_t* c = smu_get_context();
-        reply("STATUS state=%u faults=%lu I=%s V=%s autorange=%u autorange_v=%u valid=%u frames=%lu capture=%u points=%u\r\n", c->state, (unsigned long)c->faults, irange_name(c->range),
-              vrange_name(c->vrange), c->current_autorange, c->voltage_autorange, c->measurement_valid, (unsigned long)c->frame_count, capturing, points);
+        reply("STATUS state=%u faults=%lu I=%s V=%s autorange=%u autorange_v=%u impedance_requested=%s impedance=%s valid=%u frames=%lu capture=%u points=%u\r\n", c->state, (unsigned long)c->faults,
+              irange_name(c->range), vrange_name(c->vrange), c->current_autorange, c->voltage_autorange, c->input_10m_requested ? "10M" : "HIGHZ", c->input_10m_active ? "10M" : "HIGHZ",
+              c->measurement_valid, (unsigned long)c->frame_count, capturing, points);
     } else if ((!strcmp(text, "MEAS?") || !strcmp(text, "RAW?")) && !*arg) {
         smu_measurement_outputs_t out;
         smu_get_measurement(&out);
@@ -225,6 +228,7 @@ static void command(char* text) {
         target = !strcmp(arg, "V") ? TARGET_V : !strcmp(arg, "I") ? TARGET_I : TARGET_BUS;
         current_range = smu_get_context()->range;
         voltage_range = smu_get_context()->vrange;
+        capture_input_10m = smu_get_context()->input_10m_active;
         points = 0;
         ready = false;
         reply("OK manual calibration; set physical reference, then CAL:CAPTURE value\r\n");
@@ -241,6 +245,22 @@ static void command(char* text) {
             started = smu_port_millis();
             reply("OK acquiring 256 samples\r\n");
         }
+    } else if (!strcmp(text, "IMPEDANCE")) {
+        if (capturing) {
+            reply("ERR capture busy\r\n");
+            return;
+        }
+        if (strcmp(arg, "10M") && strcmp(arg, "HIGHZ")) {
+            reply("ERR 10M|HIGHZ\r\n");
+            return;
+        }
+        const smu_status_t result = smu_set_input_10m(!strcmp(arg, "10M"));
+        if (result == SMU_OK) {
+            target = TARGET_NONE;
+            points = 0;
+            reply("OK impedance requested; wait for STATUS valid=1\r\n");
+        } else
+            reply("ERR impedance request status=%u\r\n", result);
     } else if (!strcmp(text, "RANGE:I") || !strcmp(text, "RANGE:V") || !strcmp(text, "AUTORANGE") || !strcmp(text, "AUTORANGE:I") || !strcmp(text, "AUTORANGE:V")) {
         if (capturing) {
             reply("ERR capture busy\r\n");

@@ -16,6 +16,7 @@ void smu_instrument_init(smu_instrument_t* s) {
     s->state = SMU_STATE_POWER_UP;
     smu_fault_init(&s->faults);
     smu_range_init(&s->range);
+    smu_range_disconnect_input(&s->range);
     smu_compliance_init(&s->compliance, 4);
     safe_shutdown(s);
 }
@@ -23,6 +24,7 @@ void smu_instrument_init(smu_instrument_t* s) {
 bool smu_instrument_output_enable(smu_instrument_t* s) {
     if (s->state != SMU_STATE_OUTPUT_OFF || smu_fault_any(&s->faults))
         return false;
+    smu_range_inhibit_input_10m(&s->range, true);
     s->output_requested = true;
     s->measurement_valid = false;
     s->precision_servo_allowed = false;
@@ -33,6 +35,7 @@ bool smu_instrument_output_enable(smu_instrument_t* s) {
 
 void smu_instrument_output_disable(smu_instrument_t* s) {
     safe_shutdown(s);
+    smu_range_inhibit_input_10m(&s->range, false);
     if (s->state != SMU_STATE_FAULT)
         s->state = SMU_STATE_OUTPUT_OFF;
 }
@@ -64,6 +67,7 @@ void smu_instrument_tick_1ms(smu_instrument_t* s, float abs_current_A, bool comp
 
     if (smu_fault_any(&s->faults)) {
         safe_shutdown(s);
+        smu_range_disconnect_input(&s->range);
         s->state = SMU_STATE_FAULT;
         return;
     }
@@ -82,6 +86,7 @@ void smu_instrument_tick_1ms(smu_instrument_t* s, float abs_current_A, bool comp
         break;
 
     case SMU_STATE_OUTPUT_OFF:
+        smu_range_tick_ms(&s->range, 1u);
         s->measurement_valid = false;
         s->precision_servo_allowed = false;
         break;
@@ -89,7 +94,8 @@ void smu_instrument_tick_1ms(smu_instrument_t* s, float abs_current_A, bool comp
     case SMU_STATE_OUTPUT_STARTING:
         smu_range_tick_ms(&s->range, 1u);
         if (!smu_range_busy(&s->range) && s->range.active == SMU_RANGE_1P5A && s->range.measurement_valid) {
-            safety_hw_enable_pa_request();
+            if (!safety_hw_request_pa_enable())
+                break;
             s->state = SMU_STATE_NORMAL;
             s->state_ms = 0;
         }

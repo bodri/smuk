@@ -41,6 +41,7 @@ wait for the save response and fresh valid measurements afterward.
 | `RANGE:V 15V` / `6V` | Request fixed voltage range and disable voltage autorange |
 | `AUTORANGE ON` / `OFF` or `AUTORANGE:I ON` / `OFF` | Control current autorange |
 | `AUTORANGE:V ON` / `OFF` | Control voltage autorange independently |
+| `IMPEDANCE 10M` / `HIGHZ` | Select differential input loading; wait for `valid=1` |
 | `CAL:SHOW?` | Staged measurement coefficients, dirty flag and active Flash sequence |
 | `CAL:BEGIN V` / `I` / `BUS` | Start a point set for the selected fixed range/channel |
 | `CAL:CAPTURE <reference>` | Average 256 fresh accepted raw ADC samples; reference in volts for V/BUS or amperes for I |
@@ -54,6 +55,31 @@ Manual captures **do not select CALBUS or operate calibration relays**. Apply
 references using the normal measurement input path, or an externally arranged
 CALBUS connection. The entered reference must be independently measured, not
 the nominal CALBUS label or the SMU's already calibrated display.
+
+## Input impedance
+
+Startup drives MV_ON LOW, then connects R26 after ADC initialization. Default
+input loading is 10 MΩ between SENSE+ and SENSE− (`MV_ON` HIGH). Select
+`IMPEDANCE HIGHZ` to disconnect it, or `IMPEDANCE 10M` to reconnect it.
+This setting is independent of voltage range and autorange. `STATUS?` reports
+`impedance_requested` and applied `impedance` as `10M` or `HIGHZ`.
+
+Changes reset measurement filters and discard 40 frames (about 10 ms at
+4 kSPS). This initial allowance needs verification with the source impedance
+and input capacitance on the board; external settling can take longer.
+Wait for `valid=1` and allow the physical source to settle before capturing.
+Changes are rejected during captures and clear an existing calibration point
+set. Hold the setting constant throughout a fit and its verification. R26
+loads the external sense terminals even when the calibration relay selects CALBUS.
+
+PA startup inhibits the resistor before enabling the PA; output disable restores
+the requested setting after a configurable 10 ms output-decay allowance. This
+initial delay must be verified with the future PA hardware. PA enable requests are rejected while MV_ON reads HIGH,
+and 10M requests are rejected while the PA is requested or starting. Faults
+cancel the requested connection and drive MV_ON LOW. PA control is currently a
+software placeholder: physical PA-off feedback and output-decay timing must be
+implemented when the PA hardware is added. Startup assumes the present
+measurement-only hardware has no active PA.
 
 ## Voltage autorange
 

@@ -19,6 +19,7 @@ ads131m03_dma_frame_t adc_frame;
 smu_measurement_outputs_t smu_outputs;
 
 static void fault(uint32_t bits) {
+    smu_range_disconnect_input(&ranges);
     g.faults |= bits;
     g.state = SMU_STATE_FAULT;
     smu_measurement_set_valid(false);
@@ -39,6 +40,7 @@ bool smu_init(void) {
     smu_calibration_init();
     smu_cal_debug_init();
     smu_range_init(&ranges);
+    smu_range_disconnect_input(&ranges);
 
     if (!ads131m03_bringup_run(&ads_result)) {
         fault(SMU_FAULT_ADC);
@@ -49,6 +51,7 @@ bool smu_init(void) {
      * after DRDY is enabled are dropped while they settle. */
     (void)smu_range_request(&ranges, SMU_RANGE_1P5A, SMU_RANGE_REASON_USER);
     (void)smu_range_request_voltage(&ranges, SMU_VRANGE_15V);
+    (void)smu_range_request_input_10m(&ranges, true);
     smu_range_tick_ms(&ranges, 0u);
     if (ranges.tx_state == SMU_RANGE_TX_FAULT) {
         fault(SMU_FAULT_RANGE);
@@ -140,6 +143,8 @@ void smu_process(void) {
             fault(SMU_FAULT_RANGE);
     }
 
+    g.input_10m_requested = ranges.input_10m_requested;
+    g.input_10m_active = ranges.input_10m_active;
     g.range = ranges.active;
     g.vrange = ranges.vactive;
     g.overload = ranges.overload;
@@ -153,6 +158,17 @@ void smu_get_measurement(smu_measurement_outputs_t* out) {
 
 const smu_context_t* smu_get_context(void) {
     return &g;
+}
+
+smu_status_t smu_set_input_10m(bool enabled) {
+    if (g.state != SMU_STATE_NORMAL || smu_range_busy(&ranges))
+        return SMU_ERR_STATE;
+    if (!smu_range_request_input_10m(&ranges, enabled))
+        return SMU_ERR_STATE;
+    g.input_10m_requested = enabled;
+    if (smu_range_busy(&ranges))
+        g.measurement_valid = false;
+    return SMU_OK;
 }
 
 smu_status_t smu_set_current_range(smu_current_range_t range) {

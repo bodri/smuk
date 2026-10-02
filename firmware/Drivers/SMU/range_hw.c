@@ -65,6 +65,14 @@ bool range_hw_current_plausible(smu_current_range_t expected) {
     return true;
 }
 
+void range_hw_input_10m(bool on) {
+    range_hw_port_input_10m(on);
+}
+
+bool range_hw_input_10m_is_on(void) {
+    return range_hw_port_input_10m_is_on();
+}
+
 void range_hw_select_voltage(smu_voltage_range_t range) {
     range_hw_port_voltage_6v(range == SMU_VRANGE_6V);
 }

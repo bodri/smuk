@@ -14,6 +14,9 @@ bool range_hw_gate_state_valid(smu_current_range_t expected);
 bool range_hw_gate_state_invalid(void);
 bool range_hw_current_plausible(smu_current_range_t expected);
 
+void range_hw_input_10m(bool on);
+bool range_hw_input_10m_is_on(void);
+
 /* Voltage sense divider range (VRANGE). */
 void range_hw_select_voltage(smu_voltage_range_t range);
 smu_voltage_range_t range_hw_voltage_selected(void);

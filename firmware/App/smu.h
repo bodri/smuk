@@ -31,6 +31,9 @@ void smu_set_voltage_autorange(bool enabled);
 /* Manual voltage range; disables voltage autorange on success. */
 smu_status_t smu_set_voltage_range(smu_voltage_range_t range);
 
+/* Select differential input loading; rejects 10M while PA requested. */
+smu_status_t smu_set_input_10m(bool enabled);
+
 /* Tuning knobs (thresholds, persistence, discard counts). */
 smu_range_config_t* smu_range_config(void);
 

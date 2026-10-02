@@ -39,7 +39,9 @@ typedef struct {
     float voltage_up_V, voltage_down_V;
     uint16_t voltage_up_confirm_frames;
     uint32_t voltage_down_persist_ms;
-    uint16_t vrange_discard_frames; /* frames dropped after a voltage range switch */
+    uint32_t pa_off_settle_ms;         /* initial output-decay allowance; verify with PA hardware */
+    uint16_t impedance_discard_frames; /* initial 40-frame settling allowance; verify on board */
+    uint16_t vrange_discard_frames;    /* frames dropped after a voltage range switch */
 } smu_range_config_t;
 
 typedef struct {
@@ -52,6 +54,8 @@ typedef struct {
     smu_voltage_range_t vactive;
     smu_voltage_range_t vrequested;
     bool vpending;
+    bool input_10m_requested, input_10m_active, impedance_pending, pa_inhibited;
+    uint32_t pa_off_wait_ms;
     uint16_t discard_left;
     uint16_t current_up_count;
     uint32_t current_down_ms;
@@ -73,6 +77,11 @@ bool smu_range_request(smu_range_manager_t* rm, smu_current_range_t target, smu_
 bool smu_range_request_voltage(smu_range_manager_t* rm, smu_voltage_range_t target);
 void smu_range_set_current_autorange(smu_range_manager_t* rm, bool enabled);
 void smu_range_set_voltage_autorange(smu_range_manager_t* rm, bool enabled);
+bool smu_range_request_input_10m(smu_range_manager_t* rm, bool enabled);
+/* Inhibit before requesting PA enable; release only after PA disable. */
+void smu_range_inhibit_input_10m(smu_range_manager_t* rm, bool inhibited);
+/* Immediate fault/startup disconnect; also cancels pending connection. */
+void smu_range_disconnect_input(smu_range_manager_t* rm);
 bool smu_range_busy(const smu_range_manager_t* rm);
 
 /* Drive the active ranges again, e.g. after calibration opened all gates. */
