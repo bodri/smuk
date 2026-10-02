@@ -1,0 +1,26 @@
+QWidget { background: #101416; color: #e4eaec; font-family: "Helvetica Neue", "Arial"; font-size: 13px; }
+QLabel { background: transparent; }
+QMainWindow { background: #101416; }
+QFrame#header { background: #263036; border: 1px solid #354950; }
+QFrame#accent { background: #efb23b; }
+QLabel#brand { color: #efb23b; font-size: 26px; font-weight: bold; padding: 8px; }
+QLabel#sectionLabel { color: #91a2aa; font-size: 11px; font-weight: bold; letter-spacing: 1px; }
+QFrame#rangeControls, QFrame#statisticsPanel { background: #151c20; border: 1px solid #31474f; }
+QFrame#measurementDisplay { background: #080d0e; border: 1px solid #31474f; }
+QLabel#largeReading { font-family: "Menlo", "DejaVu Sans Mono"; font-size: 54px; color: #71818a; padding: 8px 0; }
+QLabel#largeReading[valid="true"] { color: #79c558; }
+QLabel#powerReading { font-family: "Menlo", "DejaVu Sans Mono"; font-size: 26px; color: #71818a; }
+QLabel#powerReading[valid="true"] { color: #e4eaec; }
+QLabel#rangeBadge { background: #233740; border: 1px solid #3d5a68; font-size: 16px; padding: 10px; }
+QLabel#modeBadge { color: #efb23b; border: 1px solid #705a2e; padding: 5px 10px; }
+QLabel#statisticValue { font-family: "Menlo", "DejaVu Sans Mono"; font-size: 14px; }
+QLabel#muted { color: #8c9ba2; font-size: 11px; }
+QLabel[valid="true"] { color: #79c558; }
+QPushButton, QComboBox, QLineEdit { background: #263e49; border: 1px solid #405d6b; border-radius: 3px; padding: 8px 12px; }
+QPushButton:hover { background: #355563; }
+QPushButton:pressed { background: #456674; }
+QPushButton#connectButton { background: #d49a29; color: #101416; font-weight: bold; }
+QPushButton:disabled, QComboBox:disabled, QLineEdit:disabled { background: #1b252a; color: #5d6b72; border-color: #2a373d; }
+QComboBox QAbstractItemView { background: #1a272e; selection-background-color: #405d6b; }
+QPlainTextEdit { background: #080d0e; color: #b9d0da; border: 1px solid #31474f; font-family: "Menlo", monospace; font-size: 11px; }
+QStatusBar { color: #efb23b; background: #101416; }

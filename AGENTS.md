@@ -8,6 +8,9 @@ This repository is a hardware/firmware monorepo. Context is scoped hierarchicall
 - **`/firmware`**: Bare-metal C code running on the ARM Cortex-M33 (CMake + GCC Toolchain).
   👉 *See `/firmware/AGENTS.md` for compilation steps and peripheral constraints.*
 
+- **`/desktop`**: Python/PySide6 desktop serial client.
+  👉 *See `/desktop/AGENTS.md` for protocol, UI, and testing guidelines.*
+
 ## 🛠️ Global Workspace Automation (Zed Editor integration)
 The project utilizes Zed Tasks mapped to keyboard shortcuts. You can invoke these directly or guide the developer to run them:
 - **Build Firmware:** `cmd-b` / `ctrl-b` (Executes the primary CMake build compilation pipeline)

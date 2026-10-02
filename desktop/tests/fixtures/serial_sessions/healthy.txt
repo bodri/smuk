@@ -1,0 +1,8 @@
+ADC ADS131M03 COMMUNICATION: PASS
+SMUK serial ready 115200 8N1. HELP for commands.
+STATUS state=4 faults=0 I=100UA V=6V autorange=1 autorange_v=1 impedance_requested=10M impedance=10M valid=1 frames=29131 capture=0 points=0
+QUALITY fresh=1 settled=1 precision_ready=1 stale=0 age_ms=0 I_clip=0 V_clip=0 BUS_clip=0 I_overload=0 V_overload=0
+WATCHDOG active=1 reset=0
+MEAS I_A=0.000000001 V_V=3.008601856 BUS_V=-0.000214955 I=100UA V=6V valid=1 samples=29131 window=32/32
+QUALITY fresh=1 settled=1 precision_ready=1 I_clip=0 V_clip=0 BUS_clip=0 I_overload=0 V_overload=0
+ACQ stale=0 age_ms=0 gaps=0 pauses=0 crc=0 spi=0 busy=252917 overruns=0 log_dropped=0

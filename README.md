@@ -167,3 +167,10 @@ The measurement firmware now uses a nominal 2-second independent watchdog.
 Foreground processing owns refresh; handled faults stay latched for diagnosis.
 See the [watchdog and CubeMX setup instructions](firmware/serial_console.md#independent-watchdog)
 for regeneration settings, reset reporting, and bench checks.
+
+## Desktop measurement console
+
+The [desktop application](desktop/README.md) provides live measurements, observed
+statistics, range/autorange controls, integration and impedance selection, and
+serial diagnostics on macOS. It uses the existing console protocol; firmware
+and hardware remain separate projects.
