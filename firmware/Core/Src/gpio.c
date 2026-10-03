@@ -48,13 +48,13 @@ void MX_GPIO_Init(void) {
     HAL_GPIO_WritePin(GPIOC, MV_ON_Pin | VRANGE_Pin, GPIO_PIN_RESET);
 
     /*Configure GPIO pin Output Level */
-    HAL_GPIO_WritePin(GPIOA, IR1MA_Pin | IR10MA_Pin | IR100MA_Pin, GPIO_PIN_SET);
+    HAL_GPIO_WritePin(GPIOA, IR1MA_Pin | IR10MA_Pin, GPIO_PIN_SET);
 
     /*Configure GPIO pin Output Level */
     HAL_GPIO_WritePin(GPIOC, ICAL_Pin | VCAL_Pin | NRESET_Pin | IR100UA_Pin, GPIO_PIN_SET);
 
     /*Configure GPIO pin Output Level */
-    HAL_GPIO_WritePin(IR2A_GPIO_Port, IR2A_Pin, GPIO_PIN_SET);
+    HAL_GPIO_WritePin(GPIOB, IR2A_Pin | IR100MA_Pin, GPIO_PIN_SET);
 
     /*Configure GPIO pin Output Level */
     HAL_GPIO_WritePin(GPIOB, CALBUS_S0_Pin | CALBUS_S1_Pin, GPIO_PIN_RESET);
@@ -67,19 +67,19 @@ void MX_GPIO_Init(void) {
     GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
     HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
 
-    /*Configure GPIO pins : IR1MA_Pin IR10MA_Pin IR100MA_Pin */
-    GPIO_InitStruct.Pin = IR1MA_Pin | IR10MA_Pin | IR100MA_Pin;
+    /*Configure GPIO pins : IR1MA_Pin IR10MA_Pin */
+    GPIO_InitStruct.Pin = IR1MA_Pin | IR10MA_Pin;
     GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
     GPIO_InitStruct.Pull = GPIO_NOPULL;
     GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_VERY_HIGH;
     HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
-    /*Configure GPIO pin : IR2A_Pin */
-    GPIO_InitStruct.Pin = IR2A_Pin;
+    /*Configure GPIO pins : IR2A_Pin IR100MA_Pin */
+    GPIO_InitStruct.Pin = IR2A_Pin | IR100MA_Pin;
     GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
     GPIO_InitStruct.Pull = GPIO_NOPULL;
     GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_VERY_HIGH;
-    HAL_GPIO_Init(IR2A_GPIO_Port, &GPIO_InitStruct);
+    HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
     /*Configure GPIO pins : CALBUS_S0_Pin CALBUS_S1_Pin */
     GPIO_InitStruct.Pin = CALBUS_S0_Pin | CALBUS_S1_Pin;

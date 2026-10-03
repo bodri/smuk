@@ -68,12 +68,12 @@ void Error_Handler(void);
 #define IR1MA_GPIO_Port GPIOA
 #define IR10MA_Pin GPIO_PIN_1
 #define IR10MA_GPIO_Port GPIOA
-#define IR100MA_Pin GPIO_PIN_2
-#define IR100MA_GPIO_Port GPIOA
 #define ICAL_Pin GPIO_PIN_4
 #define ICAL_GPIO_Port GPIOC
 #define IR2A_Pin GPIO_PIN_0
 #define IR2A_GPIO_Port GPIOB
+#define IR100MA_Pin GPIO_PIN_1
+#define IR100MA_GPIO_Port GPIOB
 #define CALBUS_S0_Pin GPIO_PIN_12
 #define CALBUS_S0_GPIO_Port GPIOB
 #define CALBUS_S1_Pin GPIO_PIN_13
