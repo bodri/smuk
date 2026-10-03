@@ -12,6 +12,7 @@ class Controller(QObject):
     changed = Signal()
     log = Signal(str, str)
     error = Signal(str)
+    reply_completed = Signal(object)
 
     def __init__(self, connection=None, parent=None):
         super().__init__(parent)
@@ -24,6 +25,9 @@ class Controller(QObject):
         self.handshaking = False
         self.last_status = self.last_acq = 0.0
         self.cal_sequence: str | None = None
+        self.calibration_active = False
+        self.calibration_points = 0
+        self.calibration_records = ()
         self.timeout = QTimer(self)
         self.timeout.setSingleShot(True)
         self.timeout.timeout.connect(self._timed_out)
@@ -56,6 +60,8 @@ class Controller(QObject):
         self.handshaking = False
         self.user_queue.clear()
         self.poll_queue.clear()
+        self.calibration_active = False
+        self.calibration_points = 0
 
     def _opened(self, path):
         self.state.port = path
@@ -82,12 +88,26 @@ class Controller(QObject):
         command = self.transaction.command if self.transaction else "command"
         self._failed(f"Timeout waiting for {command}. Reconnect to resynchronize.")
 
-    def send(self, text: str):
+    def reserve_calibration(self):
+        if not self.state.healthy or self.user_queue or self.calibration_active:
+            return False
+        self.calibration_active = True
+        self.poll_queue.clear()
+        self.changed.emit()
+        return True
+
+    def send(self, text: str, *, calibration: bool = False):
+        if self.calibration_active and not calibration:
+            self.error.emit("Finish or close manual calibration before sending other commands")
+            return
+        if calibration and not self.calibration_active:
+            self.error.emit("Manual calibration session is no longer connected")
+            return
         if not self.state.connected:
             self.error.emit("Connect to the instrument first")
             return
         try:
-            command = validate_command(text)
+            command = validate_command(text, calibration=calibration)
         except ValueError as error:
             self.error.emit(str(error))
             return
@@ -111,8 +131,8 @@ class Controller(QObject):
         if not queue:
             return
         command = queue.popleft()
-        self.transaction = Transaction(command)
-        self.timeout.start(3000 if self.handshaking else 2000)
+        self.transaction = Transaction(command, self.calibration_points)
+        self.timeout.start(3000 if self.handshaking or command.startswith("CAL:CAPTURE ") else 2000)
         self.log.emit("TX", command)
         self.connection.write(command)
 
@@ -161,6 +181,7 @@ class Controller(QObject):
                 self._enqueue_poll("STATUS?")
             else:
                 self._apply(reply)
+            self.reply_completed.emit(reply)
             self.changed.emit()
             QTimer.singleShot(0, self._pump)  # consume this RX batch before sending
         except (ValueError, KeyError, TypeError) as error:
@@ -194,16 +215,30 @@ class Controller(QObject):
             if self.state.healthy and not self.state.pending_change:
                 self.statistics.observe(measurement)
         elif reply.command == "CAL:SHOW?":
+            self.calibration_records = reply.responses
             sequence = records["CAL"].fields["sequence"]
             if self.cal_sequence is not None and self.cal_sequence != sequence:
                 self.statistics.reset()
             self.cal_sequence = sequence
+        elif reply.command.startswith("CAL:BEGIN ") or reply.command in ("CAL:ABORT", "CAL:RESET"):
+            self.calibration_points = 0
+        elif reply.command.startswith("CAL:CAPTURE "):
+            self.calibration_points += 1
+        elif reply.command == "CAL:POINTS?":
+            self.calibration_points = int(reply.responses[-1].fields["points"])
+        elif reply.command == "CAL:SAVE":
+            self.statistics.reset()
+            if not self.calibration_active:
+                self._enqueue_poll("CAL:SHOW?")
+                self._enqueue_poll("STATUS?")
+                self._enqueue_poll("MEAS?")
         elif reply.command.startswith("ECHO "):
             return
         elif reply.command not in ("PING", "RAW?", "HELP", "CAL:POINTS?"):
             self.state.message = reply.responses[-1].text
-            self._enqueue_poll("STATUS?")
-            self._enqueue_poll("MEAS?")
+            if not self.calibration_active:
+                self._enqueue_poll("STATUS?")
+                self._enqueue_poll("MEAS?")
 
     def reset_statistics(self):
         self.statistics.reset()

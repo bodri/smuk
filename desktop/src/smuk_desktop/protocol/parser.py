@@ -38,14 +38,36 @@ def parse_line(text: str) -> Response:
 
 class Transaction:
     """Known firmware multiline boundaries, never an arbitrary idle timeout."""
-    def __init__(self, command: str):
+    def __init__(self, command: str, point_count: int = 0):
         self.command = command
         self.responses: list[Response] = []
         self.primary_seen = False
+        self.point_count = point_count
 
     def accept(self, response: Response) -> Reply | None:
         if response.kind == "ERR":
             return Reply(self.command, tuple(self.responses), response.text)
+        if self.command.startswith("CAL:CAPTURE "):
+            if response.text.startswith(("OK acquiring ", "CAPTURE QUALITY ")):
+                self.responses.append(response)
+            elif response.text.startswith("OK POINT "):
+                self.responses.append(response)
+                return Reply(self.command, tuple(self.responses))
+            return None
+        if self.command == "CAL:FIT":
+            if response.text.startswith("FIT QUALITY "):
+                self.responses.append(response)
+            elif response.text.startswith("OK FIT "):
+                self.primary_seen = True
+                self.responses.append(response)
+            elif self.primary_seen and response.kind == "RESIDUAL":
+                expected = sum(r.kind == "RESIDUAL" for r in self.responses)
+                if int(response.text.split()[1]) != expected:
+                    raise ValueError("Unexpected calibration residual index")
+                self.responses.append(response)
+                if expected + 1 == self.point_count:
+                    return Reply(self.command, tuple(self.responses))
+            return None
         primary = {"PING": "PONG", "STATUS?": "STATUS", "MEAS?": "MEAS", "RAW?": "RAW", "ACQ?": "ACQ", "CAL:SHOW?": "CAL"}.get(self.command)
         if primary:
             if response.kind == primary:

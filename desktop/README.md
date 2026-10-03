@@ -50,8 +50,9 @@ If firmware resets or a command times out, reconnect explicitly.
   new statistics segment.
 - Derived power is the product of averaged voltage and current, not independently
   averaged instantaneous power. Energy integration is deferred.
-- Source/PA controls and the manual calibration wizard are deferred. No Flash writes,
-  calibration capture, source setpoints, or output-enable commands are sent.
+- Guided manual calibration for voltage, current, and CALBUS: fixed-range preparation,
+  asynchronous 256-sample captures, point quality, staged fits/residuals, explicit Flash
+  save confirmation, discard, and text report export. Source/PA controls remain deferred.
 
 Console commands currently supported: `PING`, `HELP`, `STATUS?`, `MEAS?`, `RAW?`,
 `ACQ?`, `CAL:SHOW?`, `CAL:POINTS?`, `ECHO ON|OFF`, and the range/autorange/impedance/
@@ -72,8 +73,43 @@ tests/                 Recorded wire fixtures, controller/UI and virtual-port te
 packaging/macos/       Local .app packaging configuration
 ```
 
-A calibration dialog will be created with its workflow, rather than as an empty
-placeholder. Protocol modules do not import Qt; widgets never access serial directly.
+Protocol modules do not import Qt; widgets never access serial directly.
+
+## Manual calibration
+
+1. Connect and click **Manual calibration…**. Select **V**, **I**, or **BUS**, both
+   fixed ranges, and the input impedance you will use. Click **Prepare fixed ranges**;
+   this turns both autoranges off. Integration stays at its current setting.
+2. Wait for settled measurements, then click **Begin / restart captures**. For
+   voltage, apply a known voltage across the sense inputs. For current, apply a
+   known current and measure its actual value with your reference instrument.
+   For BUS, set the physical CALBUS reference manually. The app does not switch it.
+3. Let each physical reference settle. Enter the actual value in **V** or **A**,
+   including its sign, and click **Capture 256 samples**. For example, 100 µA is
+   `0.0001` A or `1e-4` A. Capture at least two distinct, well-spaced points;
+   preferably include zero and both polarities within the selected range. Up to
+   eight points are supported. Unstable/clipped captures are rejected by firmware;
+   correct the reference and retry. The table shows nominal values and capture RMS/drift.
+4. Click **Fit staged coefficients**. Review gain, offset, spans, and residuals in
+   the detail panel. A fit updates the staged record only; live measurements still
+   use the active calibration until saved. A rejected fit is not a successful calibration.
+5. To calibrate another range or target before saving, click **Change target / ranges**,
+   select the next configuration, prepare, and repeat. Previous staged fits are retained.
+6. Click **Save staged fits to Flash…** and confirm only after reviewing the results.
+   This saves **all** staged coefficients, activates them, and resets desktop statistics.
+   Save once after fitting the intended ranges to reduce Flash writes. Verify the result
+   against independent reference values, including values not used in the fit.
+7. **Export calibration report…** saves up to the last 4,000 workflow lines, including
+   configuration commands, references, points, quality, fits, residuals and save results.
+   **Discard all staged fits…** restores the staged record from the active calibration
+   and clears captures; it does not erase saved calibration.
+
+Closing aborts the capture session and clears its points but retains staged fits.
+Both autoranges remain off and ranges/impedance remain as selected: restore your
+preferred settings explicitly after closing. Calibration controls stay in this dialog;
+the serial console does not permit capture, fit, reset or save commands. Other desktop
+controls are locked during the workflow. A disconnect/reset does not resume it;
+reconnect and begin again, checking staged coefficients before proceeding.
 
 ## Tests and preview
 

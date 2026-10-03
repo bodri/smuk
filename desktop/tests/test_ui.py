@@ -32,6 +32,6 @@ def test_confirmed_live_display_and_control_commands(app):
 
 
 def test_engineering_units():
-    assert "µA" in format_value(12e-6, "A")
+    assert "0.012 00 mA" in format_value(12e-6, "A")
     assert "mA" in format_value(-0.012, "A")
     assert " A" in format_value(1.2, "A")

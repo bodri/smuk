@@ -9,7 +9,9 @@ def format_value(value: float | None, unit: str, decimals: int = 5) -> str:
     if value is None or not math.isfinite(value):
         return f"— {unit}"
     scale, prefix = 1.0, ""
-    if unit in ("A", "W") and 0 < abs(value) < 1:
+    if unit == "A" and 0 < abs(value) < 1:
+        scale, prefix = 1e3, "m"
+    elif unit == "W" and 0 < abs(value) < 1:
         scale, prefix = (1e6, "µ") if abs(value) < 1e-3 else (1e3, "m")
     number = f"{value * scale: .{decimals}f}"
     if unit in ("A", "V") and decimals > 3:

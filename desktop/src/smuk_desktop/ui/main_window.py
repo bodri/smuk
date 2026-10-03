@@ -5,6 +5,7 @@ from .measurement_display import MeasurementDisplay
 from .range_controls import RangeControls
 from .statistics_panel import StatisticsPanel
 from .console_panel import ConsolePanel
+from .calibration_dialog import CalibrationDialog
 
 
 class MainWindow(QMainWindow):
@@ -69,6 +70,9 @@ class MainWindow(QMainWindow):
         self.diagnostics.setObjectName("muted")
         footer.addWidget(self.diagnostics)
         footer.addStretch()
+        self.calibrate = QPushButton("Manual calibration…")
+        self.calibrate.clicked.connect(self._calibrate)
+        footer.addWidget(self.calibrate)
         console_toggle = QPushButton("Serial console ▾")
         console_toggle.setCheckable(True)
         footer.addWidget(console_toggle)
@@ -114,6 +118,11 @@ class MainWindow(QMainWindow):
     def _show_error(self, message):
         self.statusBar().showMessage(message)
 
+    def _calibrate(self):
+        if self.controller.reserve_calibration():
+            dialog = CalibrationDialog(self.controller, self)
+            dialog.exec()
+
     def _update(self):
         state = self.controller.state
         busy = state.connected or self.controller.handshaking
@@ -125,6 +134,9 @@ class MainWindow(QMainWindow):
         self.health.style().unpolish(self.health)
         self.health.style().polish(self.health)
         self.ranges.update_state(state)
+        if self.controller.calibration_active:
+            self.ranges.setEnabled(False)
+        self.calibrate.setEnabled(state.healthy and not self.controller.calibration_active and not self.controller.user_queue)
         self.display.update_state(state)
         self.statistics.update_statistics(self.controller.statistics)
         self.console.set_connected(state.connected)
