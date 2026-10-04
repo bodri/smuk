@@ -58,7 +58,8 @@ mkdir -p "$BUILD_DIR" && cd "$BUILD_DIR"
 echo -e "${YELLOW}⚙️  Configuring build environment...${NC}"
 
 # Configure using absolute paths
-cmake -G Ninja -DCMAKE_TOOLCHAIN_FILE="$SCRIPT_DIR/arm-none-eabi-gcc.cmake" "$SCRIPT_DIR"
+cmake -G Ninja -DCMAKE_TOOLCHAIN_FILE="$SCRIPT_DIR/arm-none-eabi-gcc.cmake" \
+    -DADS131M03_SAMPLE_RATE_HZ="${ADS131M03_SAMPLE_RATE_HZ:-32000}" "$SCRIPT_DIR"
 ninja
 
 # 4. Success Check and Verification

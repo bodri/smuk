@@ -1,4 +1,5 @@
 #include "smu_acquisition.h"
+#include "ads131m03_rate.h"
 
 static uint32_t saturating_add(uint32_t a, uint32_t b) {
     return b > UINT32_MAX - a ? UINT32_MAX : a + b;
@@ -10,6 +11,9 @@ void smu_acquisition_init(smu_acquisition_t* s, uint32_t now, smu_acquisition_co
     s->previous = counters;
     s->last_frame_ms = s->last_poll_ms = s->window_start_ms = now;
     s->stale = true;
+    s->rate_start_ms = now;
+    s->rate_start_frames = counters.frames;
+    s->rate_start_drdy = counters.drdy;
 }
 
 void smu_acquisition_resume(smu_acquisition_t* s, uint32_t now, smu_acquisition_counters_t counters) {
@@ -19,6 +23,10 @@ void smu_acquisition_resume(smu_acquisition_t* s, uint32_t now, smu_acquisition_
     s->seen_frame = false;
     s->stale = true;
     s->gap = false;
+    s->rate_start_ms = now;
+    s->rate_start_frames = counters.frames;
+    s->rate_start_drdy = counters.drdy;
+    s->rate_known = s->rate_ok = false;
     if (now - s->window_start_ms >= s->cfg.error_window_ms) {
         s->window_start_ms = now;
         s->window_errors = 0;
@@ -26,6 +34,19 @@ void smu_acquisition_resume(smu_acquisition_t* s, uint32_t now, smu_acquisition_
 }
 
 void smu_acquisition_update(smu_acquisition_t* s, uint32_t now, smu_acquisition_counters_t counters) {
+    const uint32_t rate_elapsed = now - s->rate_start_ms;
+    if (rate_elapsed >= 1000u) {
+        s->frame_hz = (uint32_t)((uint64_t)(counters.frames - s->rate_start_frames) * 1000u / rate_elapsed);
+        s->drdy_hz = (uint32_t)((uint64_t)(counters.drdy - s->rate_start_drdy) * 1000u / rate_elapsed);
+        s->rate_known = true;
+        /* A nominal-rate window is not trustworthy if delivery is materially
+         * slow or duplicated. Allow 2% clock/tick tolerance; bench timing must
+         * still establish continuous delivery and the actual CLKIN frequency. */
+        s->rate_ok = s->frame_hz >= ADS131M03_SAMPLE_RATE_HZ * 98u / 100u && s->frame_hz <= ADS131M03_SAMPLE_RATE_HZ * 102u / 100u;
+        s->rate_start_ms = now;
+        s->rate_start_frames = counters.frames;
+        s->rate_start_drdy = counters.drdy;
+    }
     uint32_t errors = counters.crc_errors - s->previous.crc_errors;
     errors = saturating_add(errors, counters.spi_errors - s->previous.spi_errors);
     /* Busy counts skipped DRDY triggers while DMA is active. It does not

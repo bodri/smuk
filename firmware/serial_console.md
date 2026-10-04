@@ -44,10 +44,10 @@ and conversion clock continue unchanged during a save.
 | `AUTORANGE ON` / `OFF` or `AUTORANGE:I ON` / `OFF` | Control current autorange |
 | `AUTORANGE:V ON` / `OFF` | Control voltage autorange independently |
 | `IMPEDANCE 10M` / `HIGHZ` | Select differential input loading; wait for `valid=1` |
-| `INTEGRATION 1MS` / `8MS` / `20MS` / `50MS` / `100MS` | Select precision integration window; default 8 ms |
+| `INTEGRATION 1MS` / `8MS` / `20MS` / `50MS` / `100MS` | Select precision integration window; default 20 ms |
 | `CAL:SHOW?` | Coefficients, dirty flag, Flash sequence, FLASH/DEFAULTS provenance and capture limits |
 | `CAL:BEGIN V` / `I` / `BUS` | Start a point set for the selected fixed range/channel |
-| `CAL:CAPTURE <reference>` | Average 256 fresh accepted raw ADC samples; reference in volts for V/BUS or amperes for I |
+| `CAL:CAPTURE <reference>` | Average 2,048 fresh accepted raw ADC samples at 32 kSPS (256 in the 4 kSPS fallback); reference in volts for V/BUS or amperes for I |
 | `CAL:POINTS?` | Show readings, references and capture noise/drift |
 | `CAL:FIT` | Check point span, fit gain/offset and stage them; show residuals |
 | `CAL:SAVE` | Persist staged fits and apply them; requires a dirty record and stable fixed ranges |
@@ -108,10 +108,19 @@ frames after a long foreground pause. Thresholds can be tuned through
 
 ## Precision integration
 
-Select `INTEGRATION 1MS`, `8MS`, `20MS`, `50MS`, or `100MS`. At the nominal
-4 kSPS board rate these use 4, 32, 80, 200, and 400 samples respectively.
-The default remains 8 ms. Fast filtering and ADC registers are unchanged.
-Running sums use compensated arithmetic to limit accumulation drift.
+Select `INTEGRATION 1MS`, `8MS`, `20MS`, `50MS`, or `100MS`. The boot default is
+**20 ms**. At 32 kSPS these include 32, 256, 640, 1,600, and 3,200 raw samples.
+Every group of eight samples contributes its mean to a 4 kHz rolling precision
+window, keeping RAM use bounded. Group counts are 4, 32, 80, 200, and 400.
+`MEAS? window=80/80 rate_hz=32000 group_samples=8 integration_ms=20` therefore
+means a full 640-sample, nominal 20 ms window. `samples` counts accepted raw frames.
+Precision updates at group boundaries; within a group it retains the last complete
+window. Clipped I/V samples reset history immediately; any clipped CALBUS sample
+marks its entire group and stays flagged until that group leaves the window.
+Running sums use compensated arithmetic to limit accumulation drift. The fast
+path processes every accepted raw sample; its default EMA coefficient is adjusted
+to preserve the former wall-clock response. Fast filtering is independent of the
+precision integration selection.
 
 At exactly 4 kSPS, 20 ms covers one 50 Hz cycle, 50 ms covers three 60 Hz
 cycles, and 100 ms covers five 50 Hz or six 60 Hz cycles. Verify the actual
@@ -120,7 +129,75 @@ on their agreement with the selected window. These are sample-based windows,
 not a line-synchronized ADC mode. Integration changes are rejected during a
 capture and clear its point set while preserving previously staged fits.
 After selecting a window, wait for `MEAS? valid=1` before trusting precision
-readings. This setting is volatile and returns to 8 ms after reset.
+readings. This setting is volatile and returns to 20 ms after reset.
+
+### 32 kSPS acquisition and bench acceptance
+
+Bring-up writes CLOCK explicitly to `0x0702` (HR mode, all channels enabled,
+OSR 128), checks the WREG acknowledgment, and verifies the register readback.
+32 kSPS requires **8.192 MHz CLKIN**. SPI speed, framing, output CRC and DMA
+callbacks remain unchanged. Confirm CLKIN and DRDY on the actual board; register
+readback alone cannot establish the effective sampling rate.
+
+The application acquisition/measurement hot path and ADC driver compile with
+`-O2` and debug information. HAL sources and generated interrupt dispatch retain
+their original optimization settings. Other code retains its existing flags.
+Fast-math is disabled. Debug stepping in optimized functions can skip/reorder source
+lines and some local variables may be optimized out. An unoptimized hot path can
+overflow the ring at 32 kSPS, repeatedly clear integration history and latch fault 4;
+the fault thresholds have not been relaxed to accommodate that condition.
+
+CMake and CubeIDE use separate configuration files and outputs. CMake produces
+`build/smuk.elf`; the default CubeIDE launch loads `Debug/smuk.elf`. The local
+CubeIDE `.cproject` has matching per-file optimization settings (the file is
+ignored by Git). Reopen/refresh the project and clean/rebuild to apply them.
+For a fresh CubeIDE project, set `-O2` on the SMU acquisition, measurement,
+range, conversion and capture sources and the ADC/range platform wrappers listed
+in `CMakeLists.txt`; leave HAL and generated sources unchanged. Startup logs
+`SMU processing optimized=1` when `smu.c` was built with optimization; this marker
+does not substitute for checking the other hot files' compiler command lines.
+
+`ACQ?` additionally reports `rate_hz` (configured), `frame_hz` (CRC-valid frames
+delivered to the ring), `drdy_hz` (observed interrupts), `rate_known`, and `rate_ok`.
+Rates use one-second foreground observation windows. Precision is inhibited when
+a known delivered frame rate differs by more than 2% from nominal. Fast diagnostics
+and autorange remain available. Recovery clears filter history and requires a new
+full precision window. Manual captures/fits/saves are rejected while the rate is
+known to be wrong. Flash pauses restart the rate observation window. Rate checks
+are coarse diagnostics, not proof of uninterrupted delivery: short losses below
+the tolerance can escape this check. Before the first window completes, rate is
+unverified. Existing CRC, SPI, overrun and stale handling remains in force.
+
+Before accepting the 32 kSPS build:
+
+1. Record the calibrated 4 kSPS baseline at 20 ms: DC readings, zero-input noise,
+   reference deviations, ranges, and acquisition counters. Export the calibration
+   report/coefficients; do not overwrite the saved record just to change ADC rate.
+2. Check CLKIN = 8.192 MHz and DRDY period = 31.25 µs with a scope/logic analyzer.
+   Measure CS/SCLK transfer and interrupt turnaround, including console traffic;
+   each 15-byte frame must finish before the next conversion with adequate margin.
+3. After at least two seconds, verify `ACQ? rate_hz=32000`, `frame_hz` near 32000,
+   `rate_known=1 rate_ok=1`, and no increasing CRC/SPI/overrun/gap counters. Inspect
+   rising busy counts against the DRDY trace and delivered rate rather than assuming
+   every busy edge represents a lost conversion.
+4. Check `MEAS? integration_ms=20 window=80/80 group_samples=8 valid=1`; the
+   desktop should show 640/640 samples. Exercise all integration selections.
+5. Test both autoranges and input-impedance transitions. Discard counts scale eightfold
+   to preserve analogue settling: 64/128/320 raw frames for the prior 8/16/40 counts.
+   Up-range confirmation is 16 frames; clipping still requests immediate up-ranging.
+6. Compare noise and accuracy to the baseline on every calibrated range and at
+   independent positive/negative references. Higher-rate ADC samples are noisier;
+   equal-duration software averaging does not guarantee identical ADC filtering.
+7. Check a manual capture: `CAL:SHOW?` reports `capture_samples=2048 capture_ms=64`.
+   Capture duration stays nominally 64 ms; noise/drift limits are unchanged. Inspect
+   reported quality before deciding whether calibration needs to be repeated.
+8. Run sustained desktop polling, console queries, range transitions and an explicit
+   save test if needed; verify no watchdog resets or acquisition faults.
+
+The 4 kSPS fallback preserves the same millisecond integration choices and saved
+calibration layout. Build it from `firmware/` with
+`ADS131M03_SAMPLE_RATE_HZ=4000 ./build.sh`; a normal `./build.sh` selects 32000.
+Do not flash or save calibration automatically during host validation.
 
 ## Calibration quality and persistence
 
@@ -174,8 +251,8 @@ input loading is 10 MΩ between SENSE+ and SENSE− (`MV_ON` HIGH). Select
 This setting is independent of voltage range and autorange. `STATUS?` reports
 `impedance_requested` and applied `impedance` as `10M` or `HIGHZ`.
 
-Changes reset measurement filters and discard 40 frames (about 10 ms at
-4 kSPS). This initial allowance needs verification with the source impedance
+Changes reset measurement filters and discard 320 frames at 32 kSPS (40 at
+4 kSPS), preserving about 10 ms of settling. This allowance needs verification with the source impedance
 and input capacitance on the board; external settling can take longer.
 Wait for `valid=1` and allow the physical source to settle before capturing.
 Changes are rejected during captures and clear an existing calibration point

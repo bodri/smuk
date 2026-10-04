@@ -113,22 +113,22 @@ void smu_range_init(smu_range_manager_t* rm) {
     rm->cfg.current_up_fraction = 0.90f;
     rm->cfg.current_overload_fraction = 1.05f;
     rm->cfg.current_fit_fraction = 0.70f;
-    rm->cfg.current_up_confirm_frames = 2u;
+    rm->cfg.current_up_confirm_frames = 2u * SMU_RATE_SCALE;
     rm->cfg.current_down_persist_ms = 50u;
-    /* ~4 kSPS: covers the in-flight frame, sinc3 latency and analog settling.
+    /* Preserve the original wall-clock settling at the configured rate:
      * The high-ohm shunts settle slowest. */
-    rm->cfg.current_discard_frames[SMU_RANGE_1P5A] = 8u;
-    rm->cfg.current_discard_frames[SMU_RANGE_100MA] = 8u;
-    rm->cfg.current_discard_frames[SMU_RANGE_10MA] = 8u;
-    rm->cfg.current_discard_frames[SMU_RANGE_1MA] = 16u;
-    rm->cfg.current_discard_frames[SMU_RANGE_100UA] = 40u;
-    rm->cfg.vrange_discard_frames = 40u;
-    rm->cfg.resume_discard_frames = 40u;
-    rm->cfg.impedance_discard_frames = 40u;
+    rm->cfg.current_discard_frames[SMU_RANGE_1P5A] = 8u * SMU_RATE_SCALE;
+    rm->cfg.current_discard_frames[SMU_RANGE_100MA] = 8u * SMU_RATE_SCALE;
+    rm->cfg.current_discard_frames[SMU_RANGE_10MA] = 8u * SMU_RATE_SCALE;
+    rm->cfg.current_discard_frames[SMU_RANGE_1MA] = 16u * SMU_RATE_SCALE;
+    rm->cfg.current_discard_frames[SMU_RANGE_100UA] = 40u * SMU_RATE_SCALE;
+    rm->cfg.vrange_discard_frames = 40u * SMU_RATE_SCALE;
+    rm->cfg.resume_discard_frames = 40u * SMU_RATE_SCALE;
+    rm->cfg.impedance_discard_frames = 40u * SMU_RATE_SCALE;
     rm->cfg.pa_off_settle_ms = 10u;
     rm->cfg.voltage_up_V = 6.2f;
     rm->cfg.voltage_down_V = 5.0f;
-    rm->cfg.voltage_up_confirm_frames = 2u;
+    rm->cfg.voltage_up_confirm_frames = 2u * SMU_RATE_SCALE;
     rm->cfg.voltage_down_persist_ms = 100u;
 }
 

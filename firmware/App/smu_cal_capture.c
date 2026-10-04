@@ -6,7 +6,7 @@ smu_cal_capture_config_t smu_cal_capture_default_config(void) {
 }
 
 bool smu_cal_capture_init(smu_cal_capture_t* s, uint16_t samples) {
-    if (!s || samples < 2 || samples > 1024 || samples % 2)
+    if (!s || samples < 2 || samples > 2048 || samples % 2)
         return false;
     *s = (smu_cal_capture_t){.expected = samples};
     return true;
@@ -19,7 +19,7 @@ bool smu_cal_capture_add(smu_cal_capture_t* s, int32_t code) {
         s->anchor = s->minimum = s->maximum = code;
     const int64_t delta = (int64_t)code - s->anchor;
     /* Centered integer sums preserve small noise on large DC levels. For
-     * <=1024 unclipped 24-bit samples, all accumulators fit signed 64 bits. */
+     * <=2048 unclipped 24-bit samples, all accumulators fit signed 64 bits. */
     s->sum += code;
     s->delta_sum += delta;
     s->delta_squared_sum += delta * delta;

@@ -1,4 +1,5 @@
 #include "smu_cal_seq.h"
+#include "ads131m03_rate.h"
 #include "range_hw.h"
 #include "safety_hw.h"
 
@@ -23,8 +24,8 @@ void smu_cal_seq_init(smu_cal_seq_t* s) {
     *s = (smu_cal_seq_t){0};
     s->capture_cfg = smu_cal_capture_default_config();
     s->acquisition_timeout_ms = SMU_CAL_SEQ_DEFAULT_TIMEOUT_MS;
-    s->discard_required = 16;
-    s->acquire_required = 64;
+    s->discard_required = 16u * SMU_RATE_SCALE;
+    s->acquire_required = 64u * SMU_RATE_SCALE;
 }
 
 bool smu_cal_seq_start(smu_cal_seq_t* s, smu_cal_target_t t, calbus_sel_t b) {

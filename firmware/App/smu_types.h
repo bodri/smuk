@@ -55,6 +55,8 @@ typedef struct {
     uint32_t range_switch_count;
     uint32_t measurement_age_ms, acquisition_gap_count, acquisition_pause_count;
     uint32_t adc_crc_errors, adc_spi_errors, adc_busy_count, adc_overruns;
+    uint32_t adc_frame_hz, adc_drdy_hz;
+    bool adc_rate_known, adc_rate_ok;
     bool acquisition_stale, measurement_fresh, measurement_settled, precision_ready;
     bool current_clipped, voltage_clipped, calbus_clipped;
     bool current_overload, voltage_overload;

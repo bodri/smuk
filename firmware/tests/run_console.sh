@@ -3,7 +3,8 @@ set -eu
 firmware_dir=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 test_dir=$(mktemp -d)
 trap 'rm -rf "$test_dir"' EXIT HUP INT TERM
-"${CC:-cc}" -std=c11 -Wall -Wextra -Werror \
+for rate in 4000 32000; do
+"${CC:-cc}" -std=c11 -O2 -DADS131M03_SAMPLE_RATE_HZ="$rate" -Wall -Wextra -Werror \
     -I"$firmware_dir/Drivers/SMU" -I"$firmware_dir/App" -I"$firmware_dir/Storage" \
     "$firmware_dir/tests/test_console.c" "$firmware_dir/App/smu_console.c" \
     "$firmware_dir/App/smu_watchdog.c" \
@@ -11,7 +12,8 @@ trap 'rm -rf "$test_dir"' EXIT HUP INT TERM
     "$firmware_dir/App/smu_cal_capture.c" \
     "$firmware_dir/App/smu_measurement.c" "$firmware_dir/App/smu_calibration_fit.c" -lm -o "$test_dir/test_console"
 "$test_dir/test_console"
-"${CC:-cc}" -std=c11 -Wall -Wextra -Werror \
+done
+"${CC:-cc}" -std=c11 -O2 -DADS131M03_SAMPLE_RATE_HZ=4000 -Wall -Wextra -Werror \
     -I"$firmware_dir/tests/console_hal_support" -I"$firmware_dir/App" -I"$firmware_dir/Drivers/SMU" \
     "$firmware_dir/Drivers/SMU/smu_log.c" \
     "$firmware_dir/tests/test_console_port.c" \

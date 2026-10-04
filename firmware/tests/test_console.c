@@ -113,7 +113,8 @@ static void send(const char* text) {
 
 static void sample(int32_t code) {
     ads131m03_frame_t f = {.ch = {code, code, code}, .crc_ok = true};
-    smu_measurement_process_frame(&f);
+    for (unsigned j = 0; j < SMU_PRECISION_GROUP_SAMPLES; ++j)
+        smu_measurement_process_frame(&f);
 }
 
 static void point(const char* reference, int32_t code) {
@@ -122,7 +123,7 @@ static void point(const char* reference, int32_t code) {
     send(text);
     assert(strstr(output, "acquiring"));
     ads131m03_dma_frame_t frame = {.ch0 = code, .ch1 = code, .ch2 = code};
-    for (unsigned i = 0; i < 256; ++i)
+    for (unsigned i = 0; i < SMU_CAL_CAPTURE_SAMPLES; ++i)
         smu_console_frame(&frame, ctx.range, ctx.vrange);
     smu_console_process();
     assert(strstr(output, "OK POINT"));
@@ -249,7 +250,7 @@ int main(void) {
     send("CAL:BEGIN BUS\n");
     send("CAL:CAPTURE 0\n");
     ads131m03_dma_frame_t noisy = {0};
-    for (unsigned i = 0; i < 256; ++i) {
+    for (unsigned i = 0; i < SMU_CAL_CAPTURE_SAMPLES; ++i) {
         noisy.ch2 = i % 2 ? 100000 : -100000;
         smu_console_frame(&noisy, ctx.range, ctx.vrange);
     }

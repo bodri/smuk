@@ -40,7 +40,12 @@ CAL:SHOW?
 
 - [ ] `STATUS?` reports `state=4`, `faults=0`, and both autoranges enabled at startup.
 - [ ] Measurements become `fresh=1`, `settled=1`, and `valid=1`.
-- [ ] Precision becomes ready and `MEAS? window` fills completely (default `32/32`).
+- [ ] Precision becomes ready and `MEAS? window` fills completely (default `80/80`
+  groups, `group_samples=8 integration_ms=20`: 640 raw samples at 32 kSPS).
+- [ ] After at least two seconds, `ACQ?` reports `rate_hz=32000`, `frame_hz` near
+  32000, and `rate_known=1 rate_ok=1`; confirm 31.25 µs conversion periods and
+  SPI/DMA timing on the scope. Follow the detailed
+  [32 kSPS acceptance procedure](../firmware/serial_console.md#32-ksps-acquisition-and-bench-acceptance).
 - [ ] `ACQ?` reports `stale=0`; frame count advances.
 - [ ] Observe for a recorded duration; CRC/SPI errors, overruns, and gaps do not increase.
 - [ ] Record the DMA-busy count separately. Busy events are skipped DRDY triggers;

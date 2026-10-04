@@ -16,12 +16,12 @@ typedef struct {
     smu_linear_cal_t calbus;
 } smu_measurement_cal_t;
 
-#define SMU_MEASUREMENT_SAMPLE_RATE_HZ 4000u /* nominal board rate; ADC configuration unchanged */
+#define SMU_MEASUREMENT_SAMPLE_RATE_HZ ADS131M03_SAMPLE_RATE_HZ
 #define SMU_PRECISION_MAX_SAMPLES 400u
 
 typedef struct {
     float fast_alpha;     /* EMA alpha, default 0.25 */
-    uint16_t precision_n; /* boxcar length, default 32 */
+    uint16_t precision_n; /* 4 kHz group window, default 32; includes every raw sample */
 } smu_filter_config_t;
 
 typedef struct {
@@ -47,6 +47,8 @@ void smu_measurement_set_voltage_range(smu_voltage_range_t range);
 void smu_measurement_set_valid(bool valid);
 /* Foreground acquisition monitor invalidates immediately on stale/gapped data. */
 void smu_measurement_set_fresh(bool fresh);
+/* Rate mismatch inhibits precision only; fast diagnostics/autorange remain available. */
+void smu_measurement_set_rate_valid(bool valid);
 void smu_measurement_set_compliance(bool active);
 void smu_measurement_set_range_transition(bool active);
 void smu_measurement_set_overload(bool active);

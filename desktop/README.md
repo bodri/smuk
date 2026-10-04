@@ -43,6 +43,9 @@ If firmware resets or a command times out, reconnect explicitly.
   acquisition diagnostics at 0.5 Hz, without an accumulating polling backlog.
 - Current ranges: 1.5 A, 100 mA, 10 mA, 1 mA, 100 µA. Voltage ranges: 15 V and 6 V.
 - Independent autorange, 10 MΩ/HIGHZ input, and 1/8/20/50/100 ms integration controls.
+  New firmware defaults to 32 kSPS acquisition and 20 ms integration. The display
+  shows raw-sample coverage (640 samples for 20 ms), and acquisition diagnostics
+  show the delivered rate. A known rate mismatch inhibits live precision readings.
 - Invalid, settling, stale, clipped, faulted, and disconnected data is dimmed or labelled.
 - Min/average/max and reset for distinct valid observed measurements. These statistics
   cover polled replies, not every ADC sample. Repeated sample counters are excluded;
@@ -51,7 +54,7 @@ If firmware resets or a command times out, reconnect explicitly.
 - Derived power is the product of averaged voltage and current, not independently
   averaged instantaneous power. Energy integration is deferred.
 - Guided manual calibration for voltage, current, and CALBUS: fixed-range preparation,
-  asynchronous 256-sample captures, point quality, staged fits/residuals, explicit Flash
+  rate-aware asynchronous captures, point quality, staged fits/residuals, explicit Flash
   save confirmation, discard, and text report export. Source/PA controls remain deferred.
 
 Console commands currently supported: `PING`, `HELP`, `STATUS?`, `MEAS?`, `RAW?`,
@@ -85,7 +88,8 @@ Protocol modules do not import Qt; widgets never access serial directly.
    known current and measure its actual value with your reference instrument.
    For BUS, set the physical CALBUS reference manually. The app does not switch it.
 3. Let each physical reference settle. Enter the actual value in **V** or **A**,
-   including its sign, and click **Capture 256 samples**. For example, 100 µA is
+   including its sign, and click **Capture … samples**. The count is read from firmware:
+   2,048 samples at 32 kSPS, or 256 at 4 kSPS, both nominally 64 ms. For example, 100 µA is
    `0.0001` A or `1e-4` A. Capture at least two distinct, well-spaced points;
    preferably include zero and both polarities within the selected range. Up to
    eight points are supported. Unstable/clipped captures are rejected by firmware;

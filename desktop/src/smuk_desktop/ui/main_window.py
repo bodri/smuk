@@ -143,6 +143,10 @@ class MainWindow(QMainWindow):
         a = state.acquisition
         if a:
             self.diagnostics.setText(f"CRC {a.get('crc', '—')}  SPI {a.get('spi', '—')}  Gaps {a.get('gaps', '—')}  Busy {a.get('busy', '—')}  •  IWDG {'ON' if state.watchdog.get('active') == '1' else '—'}  •  PA unavailable")
+            if "frame_hz" in a:
+                self.diagnostics.setText(self.diagnostics.text() + f" • ADC {a['frame_hz']}/{a.get('rate_hz', '—')} SPS")
+                if a.get("rate_known") == "1" and a.get("rate_ok") == "0":
+                    self.health.setText("ADC RATE MISMATCH • precision invalid")
 
     def closeEvent(self, event):
         self.controller.disconnect()

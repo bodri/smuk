@@ -20,7 +20,8 @@ static void calibration_save_end(void);
 
 static smu_acquisition_counters_t acquisition_counters(void) {
     const ads131m03_dma_status_t* s = ads131m03_dma_get_status();
-    return (smu_acquisition_counters_t){.frames = s->frame_count, .crc_errors = s->crc_error_count, .spi_errors = s->spi_error_count, .busy = s->dma_busy_count, .overruns = s->ring_overrun_count};
+    return (smu_acquisition_counters_t){
+        .frames = s->frame_count, .crc_errors = s->crc_error_count, .spi_errors = s->spi_error_count, .busy = s->dma_busy_count, .overruns = s->ring_overrun_count, .drdy = s->drdy_count};
 }
 
 /* Non-static for debugger watch windows (previously in main.c). */
@@ -48,6 +49,11 @@ bool smu_init(void) {
     g.state = SMU_STATE_POWER_UP;
     g.current_autorange = true;
     g.voltage_autorange = true;
+#ifdef __OPTIMIZE__
+    (void)smu_log_write("SMU processing optimized=1\r\n");
+#else
+    (void)smu_log_write("SMU processing optimized=0\r\n");
+#endif
 
     /*
      * smu_cal_store_init() DOES NOT erase Flash.
@@ -56,6 +62,7 @@ bool smu_init(void) {
      */
     smu_cal_store_init();
     smu_calibration_init();
+    (void)smu_measurement_set_precision_samples(20u * (SMU_PRECISION_RATE_HZ / 1000u));
     smu_cal_debug_init();
     smu_range_init(&ranges);
     smu_calibration_set_save_hooks(calibration_save_begin, calibration_save_end);
@@ -94,7 +101,9 @@ bool smu_init(void) {
 static void process_frames(void) {
     ads131m03_dma_frame_t f;
 
-    while (ads131m03_dma_pop(&f)) {
+    /* Bound foreground work even if acquisition outruns processing. Console,
+     * range ticking and watchdog service must still get execution time. */
+    for (unsigned budget = ADS_DMA_RING_SIZE - 1u; budget && ads131m03_dma_pop(&f); --budget) {
         adc_frame = f;
         g.frame_count++;
 
@@ -210,6 +219,7 @@ void smu_process(void) {
 
     const uint32_t now = smu_port_millis();
     smu_acquisition_update(&acquisition, now, acquisition_counters());
+    smu_measurement_set_rate_valid(!acquisition.rate_known || acquisition.rate_ok);
     if (acquisition.gap) {
         /* Counter-only diagnostics cannot locate a gap within queued frames.
          * Conservatively drop the backlog; recovery requires new ADC progress. */
@@ -250,6 +260,10 @@ void smu_process(void) {
     g.adc_spi_errors = acquisition.previous.spi_errors;
     g.adc_busy_count = acquisition.previous.busy;
     g.adc_overruns = acquisition.previous.overruns;
+    g.adc_frame_hz = acquisition.frame_hz;
+    g.adc_drdy_hz = acquisition.drdy_hz;
+    g.adc_rate_known = acquisition.rate_known;
+    g.adc_rate_ok = acquisition.rate_ok;
     g.range_switch_count = ranges.switch_count;
 }
 
@@ -308,7 +322,7 @@ smu_status_t smu_set_integration_ms(uint16_t milliseconds) {
         return SMU_ERR_ARG;
     if (g.state != SMU_STATE_NORMAL || smu_range_busy(&ranges))
         return SMU_ERR_STATE;
-    const uint16_t samples = (uint16_t)(milliseconds * (SMU_MEASUREMENT_SAMPLE_RATE_HZ / 1000u));
+    const uint16_t samples = (uint16_t)(milliseconds * (SMU_PRECISION_RATE_HZ / 1000u));
     if (!smu_measurement_set_precision_samples(samples))
         return SMU_ERR_ARG;
     update_measurement_context();

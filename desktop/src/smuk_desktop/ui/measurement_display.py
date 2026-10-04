@@ -106,11 +106,11 @@ class MeasurementDisplay(QFrame):
         elif state.status.get("faults", "0") != "0":
             quality = f"FAULT {state.status['faults']} • reboot required"
         elif state.live:
-            quality = f"LIVE • settled • window {m.populated}/{m.window} • BUS {m.calbus:.6f} V"
+            quality = f"LIVE • settled • {m.integration_ms} ms • window {m.populated * m.group_samples}/{m.window * m.group_samples} samples • BUS {m.calbus:.6f} V"
         elif m and any(m.quality.get(k) == "1" for k in ("I_clip", "V_clip", "I_overload", "V_overload")):
             quality = "OVERLOAD / ADC CLIPPING • reading invalid"
         elif m and (time.monotonic() - m.received_at >= 1.2 or m.quality.get("fresh") == "0"):
             quality = "STALE • readings retained • waiting for fresh data"
         else:
-            quality = f"WAITING / SETTLING • window {m.populated}/{m.window}" if m else "Waiting for measurements"
+            quality = f"WAITING / SETTLING • window {m.populated * m.group_samples}/{m.window * m.group_samples} samples" if m else "Waiting for measurements"
         self.quality.setText(quality)

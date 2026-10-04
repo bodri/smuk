@@ -8,6 +8,7 @@
 #ifndef ADS131M03_H
 #define ADS131M03_H
 
+#include "ads131m03_rate.h"
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>

@@ -131,3 +131,15 @@ def test_capture_timeout_disconnects_without_resuming_session(app):
     assert not c.state.connected and not c.calibration_active
     emit(app, connection, "OK POINT 0 nominal=1 reference=1")
     assert c.calibration_points == 0
+
+
+def test_rate_aware_capture_label(app):
+    c, connection = session(app)
+    complete_startup(app, c, connection)
+    assert c.reserve_calibration()
+    d = CalibrationDialog(c)
+    emit(app, connection, "CAL active sequence=1 staged_dirty=0 source=FLASH",
+         "CAPTURE LIMIT rms_codes=4096 capture_samples=2048 capture_ms=64")
+    assert "2048" in d.capture.text()
+    c.disconnect()
+    d.close()

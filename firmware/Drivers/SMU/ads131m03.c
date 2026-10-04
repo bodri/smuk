@@ -219,6 +219,7 @@ bool ads131m03_decode_frame24(const uint8_t raw[ADS131M03_FRAME_BYTES_24], ads13
 #define FRAME_BYTES 15u
 #define CMD_RESET 0x0011u
 #define CMD_RREG(a) ((uint16_t)(0xA000u | (((uint16_t)(a) & 0x3Fu) << 7)))
+#define CMD_WREG(a) ((uint16_t)(0x6000u | (((uint16_t)(a) & 0x3Fu) << 7)))
 
 #define CLOCK_CH_EN_MASK 0x0700u
 #define CLOCK_OSR_MASK 0x001Cu
@@ -255,6 +256,19 @@ static void logreg(const char* name, uint16_t v) {
     (void)smu_log_printf("ADC ADS %-5s = 0x%04X\r\n", name, (unsigned)v);
 }
 
+static bool write_clock(uint16_t clock) {
+    uint8_t tx[FRAME_BYTES], rx[FRAME_BYTES];
+    put_cmd(tx, CMD_WREG(0x03));
+    tx[3] = (uint8_t)(clock >> 8);
+    tx[4] = (uint8_t)clock;
+    if (!ads131m03_port_transfer(tx, rx, FRAME_BYTES))
+        return false;
+    memset(tx, 0, sizeof(tx));
+    if (!ads131m03_port_transfer(tx, rx, FRAME_BYTES))
+        return false;
+    return word16(rx) == (uint16_t)(0x4000u | (0x03u << 7));
+}
+
 bool ads131m03_bringup_run(ads131m03_bringup_result_t* o) {
     if (!o)
         return false;
@@ -289,6 +303,13 @@ bool ads131m03_bringup_run(ads131m03_bringup_result_t* o) {
         return false;
     if (!xfer_cmd_response(CMD_RREG(0x02), &o->mode, o->raw))
         return false;
+    /* Explicitly select OSR while preserving the reset channel enables, TBM=0
+     * and HR power mode. Full 24-bit frames, input CRC disabled by reset MODE. */
+    const uint16_t desired_clock = 0x0702u | ADS131M03_CLOCK_OSR_BITS;
+    if (!write_clock(desired_clock))
+        return false;
+    /* Let the digital filter settle before the readback and acquisition. */
+    ads131m03_port_delay_ms(2);
     if (!xfer_cmd_response(CMD_RREG(0x03), &o->clock, o->raw))
         return false;
     o->id_ok = ((o->id & 0xFF00u) == 0x2300u); /* low ID byte is reserved/variable */
@@ -296,13 +317,14 @@ bool ads131m03_bringup_run(ads131m03_bringup_result_t* o) {
     /* CLOCK expected configuration:
      * CH2_EN, CH1_EN, CH0_EN = 1
      * TBM = 0
-     * OSR = 011 (1024)
+     * OSR from the shared rate configuration (128 at 32 kSPS)
      * PWR = 10
      */
-    o->clock_ok = ((o->clock & CLOCK_CH_EN_MASK) == 0x0700u) && ((o->clock & CLOCK_OSR_MASK) == 0x000Cu) && ((o->clock & CLOCK_PWR_MASK) == 0x0002u);
+    o->clock_ok = (o->clock == desired_clock);
     logreg("ID", o->id);
     logreg("MODE", o->mode);
     logreg("CLOCK", o->clock);
+    (void)smu_log_printf("ADC configured rate=%lu Hz (8.192 MHz CLKIN required)\r\n", (unsigned long)ADS131M03_SAMPLE_RATE_HZ);
     (void)smu_log_write((o->id_ok && o->mode_ok && o->clock_ok) ? "ADC ADS131M03 COMMUNICATION: PASS\r\n" : "ADC ADS131M03 REGISTER CHECK: FAIL\r\n");
     return o->id_ok && o->mode_ok && o->clock_ok;
 }

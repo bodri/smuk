@@ -5,6 +5,12 @@
 #define ADC_POS_FS_CODES 8388608.0f
 #define ADC_FSR_V 1.2f
 #define PREC_MAX SMU_PRECISION_MAX_SAMPLES
+#if ADS131M03_SAMPLE_RATE_HZ == 32000u
+/* 1 - (1 - 0.25)^(1/8): preserve the previous EMA wall-clock response. */
+#define DEFAULT_FAST_ALPHA 0.03532137f
+#else
+#define DEFAULT_FAST_ALPHA 0.25f
+#endif
 
 typedef struct {
     smu_measurement_cal_t cal;
@@ -20,6 +26,10 @@ typedef struct {
     float si, sv, sc;
     float ci, cv, cc; /* compensated running sums */
     uint16_t pidx, pcount;
+    int32_t block_i, block_v, block_c;
+    uint16_t block_count;
+    bool block_calbus_clipped;
+    bool rate_valid;
     smu_measurement_outputs_t out;
 } meas_ctx_t;
 
@@ -95,7 +105,7 @@ static void refresh_outputs(void) {
     refresh_quality(&g.out.precision);
     g.out.precision_count = g.pcount;
     g.out.precision_window = g.cfg.precision_n;
-    g.out.precision_ready = g.out.precision.valid && g.pcount == g.cfg.precision_n;
+    g.out.precision_ready = g.rate_valid && g.out.precision.valid && g.pcount == g.cfg.precision_n;
     g.out.precision.valid = g.out.precision_ready;
 }
 
@@ -130,12 +140,13 @@ void smu_measurement_init(const smu_measurement_cal_t* cal, const smu_filter_con
     if (smu_measurement_calibration_usable(cal))
         g.cal = *cal;
     g.fresh = true; /* standalone caller supplies fresh frames; SMU monitors acquisition */
-    g.cfg.fast_alpha = 0.25f;
+    g.rate_valid = true;
+    g.cfg.fast_alpha = DEFAULT_FAST_ALPHA;
     g.cfg.precision_n = 32u;
     if (cfg)
         g.cfg = *cfg;
     if (!isfinite(g.cfg.fast_alpha) || g.cfg.fast_alpha <= 0.0f || g.cfg.fast_alpha > 1.0f)
-        g.cfg.fast_alpha = 0.25f;
+        g.cfg.fast_alpha = DEFAULT_FAST_ALPHA;
     if (g.cfg.precision_n < 1u)
         g.cfg.precision_n = 1u;
     if (g.cfg.precision_n > PREC_MAX)
@@ -153,15 +164,17 @@ bool smu_measurement_set_calibration(const smu_measurement_cal_t* cal) {
 
 void smu_measurement_reset_filters(void) {
     g.fast_started = g.has_sample = g.calbus_fast_started = false;
-    memset(g.pc_clipped, 0, sizeof(g.pc_clipped));
+    /* Logical invalidation is sufficient: while pcount < n, insertion never
+     * reads old slots. Once full, all n slots (including clip flags) have been
+     * overwritten. Avoid a 5 KB clear on every clipped frame/range transition. */
     g.pc_clipped_count = 0;
     g.fi = g.fv = g.fc = 0.0f;
-    memset(g.pi, 0, sizeof(g.pi));
-    memset(g.pv, 0, sizeof(g.pv));
-    memset(g.pc, 0, sizeof(g.pc));
     g.si = g.sv = g.sc = 0.0f;
     g.ci = g.cv = g.cc = 0.0f;
     g.pidx = g.pcount = 0u;
+    g.block_i = g.block_v = g.block_c = 0;
+    g.block_count = 0;
+    g.block_calbus_clipped = false;
     refresh_outputs();
 }
 
@@ -197,6 +210,14 @@ void smu_measurement_set_valid(bool v) {
 
 void smu_measurement_set_fresh(bool fresh) {
     g.fresh = fresh;
+    refresh_outputs();
+}
+
+void smu_measurement_set_rate_valid(bool valid) {
+    if (valid != g.rate_valid) {
+        g.rate_valid = valid;
+        smu_measurement_reset_filters();
+    }
     refresh_outputs();
 }
 
@@ -259,6 +280,28 @@ bool smu_measurement_process_frame(const ads131m03_frame_t* f) {
         g.fc += g.cfg.fast_alpha * (c - g.fc);
     g.has_sample = true;
     fill(&g.out.fast, f, g.fi, g.fv, g.fc);
+    /* Non-overlapping group means, never sample dropping. A 20 ms window is
+     * 80 groups of eight at 32 kSPS, or 80 individual samples at 4 kSPS.
+     * Eight signed 24-bit codes fit comfortably in int32_t. Linear calibration
+     * commutes with averaging, so convert each group only once for precision. */
+    g.block_i += f->ch[0];
+    g.block_v += f->ch[1];
+    g.block_c += f->ch[2];
+    g.block_calbus_clipped |= clipped(f->ch[2]);
+    if (++g.block_count < SMU_PRECISION_GROUP_SAMPLES) {
+        refresh_outputs();
+        g.out.sample_count++;
+        return true;
+    }
+    const float code_scale = 1.0f / SMU_PRECISION_GROUP_SAMPLES;
+    const float adc_scale = ADC_FSR_V / ADC_POS_FS_CODES;
+    i = smu_current_from_adc((float)g.block_i * code_scale * adc_scale, g.irange);
+    v = smu_voltage_from_adc((float)g.block_v * code_scale * adc_scale, g.vrange);
+    c = smu_calbus_from_adc((float)g.block_c * code_scale * adc_scale);
+    if (ix >= 0)
+        i = apply_cal(i, g.cal.current[ix]);
+    v = apply_cal(v, g.cal.voltage[g.vrange]);
+    c = apply_cal(c, g.cal.calbus);
     uint16_t n = g.cfg.precision_n, x = g.pidx;
     if (g.pcount == n) {
         add_compensated(&g.si, &g.ci, -g.pi[x]);
@@ -271,7 +314,7 @@ bool smu_measurement_process_frame(const ads131m03_frame_t* f) {
     g.pi[x] = i;
     g.pv[x] = v;
     g.pc[x] = c;
-    g.pc_clipped[x] = clipped(f->ch[2]);
+    g.pc_clipped[x] = g.block_calbus_clipped;
     if (g.pc_clipped[x])
         ++g.pc_clipped_count;
     add_compensated(&g.si, &g.ci, i);
@@ -280,6 +323,9 @@ bool smu_measurement_process_frame(const ads131m03_frame_t* f) {
     g.pidx = (uint16_t)((x + 1u) % n);
     fill(&g.out.precision, f, g.si / g.pcount, g.sv / g.pcount, g.sc / g.pcount);
     g.out.precision.calbus_clipped = g.pc_clipped_count != 0;
+    g.block_i = g.block_v = g.block_c = 0;
+    g.block_count = 0;
+    g.block_calbus_clipped = false;
     refresh_outputs();
     g.out.sample_count++;
     return true;

@@ -61,3 +61,13 @@ def test_command_injection_and_unknown_commands_rejected():
     with pytest.raises(ValueError):
         parse_line("MEAS valid=1 valid=0")
     assert parse_line("ADC diagnostics x=1 x=2").kind == "ADC"
+
+
+def test_32ksps_precision_metadata():
+    from test_controller import MEAS, QUALITY
+    text = MEAS.replace("window=32/32", "window=80/80") + " rate_hz=32000 group_samples=8 integration_ms=20"
+    m = Measurement.from_responses(parse_line(text), parse_line(QUALITY))
+    assert m.valid and m.sample_rate_hz == 32000 and m.group_samples == 8 and m.integration_ms == 20
+    assert m.window * m.group_samples == 640
+    with pytest.raises(ValueError):
+        Measurement.from_responses(parse_line(text.replace("group_samples=8", "group_samples=1")), parse_line(QUALITY))

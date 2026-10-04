@@ -5,7 +5,7 @@
 
 /* Foreground health monitoring; no changes to ADC/SPI interrupt behavior. */
 typedef struct {
-    uint32_t frames, crc_errors, spi_errors, busy, overruns;
+    uint32_t frames, crc_errors, spi_errors, busy, overruns, drdy;
 } smu_acquisition_counters_t;
 
 typedef struct {
@@ -17,6 +17,9 @@ typedef struct {
     smu_acquisition_counters_t previous;
     uint32_t last_frame_ms, last_poll_ms, window_start_ms, window_errors;
     uint32_t age_ms, gap_count;
+    uint32_t rate_start_ms, rate_start_frames, rate_start_drdy;
+    uint32_t frame_hz, drdy_hz;
+    bool rate_known, rate_ok;
     bool seen_frame, stale, gap, fault;
 } smu_acquisition_t;
 

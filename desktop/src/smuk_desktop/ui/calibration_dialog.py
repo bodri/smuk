@@ -26,6 +26,7 @@ class CalibrationDialog(QDialog):
         self.fitted = False
         self.dirty = False
         self.closing = False
+        self.capture_samples = 256  # compatible with older firmware
         self.report = deque(maxlen=4000)
         layout = QVBoxLayout(self)
         intro = QLabel(
@@ -69,7 +70,7 @@ class CalibrationDialog(QDialog):
         self.reference = QLineEdit()
         self.reference.setPlaceholderText("e.g. -5.00012 or 0.0001; scientific notation accepted")
         capture_row.addWidget(self.reference)
-        self.capture = QPushButton("Capture 256 samples")
+        self.capture = QPushButton("Capture reference")
         capture_row.addWidget(self.capture)
         layout.addLayout(capture_row)
         self.points = QTableWidget(0, 4)
@@ -209,6 +210,9 @@ class CalibrationDialog(QDialog):
             self._record("Saved. Check independent references with MEAS; staged fits are now active.")
         elif command == "CAL:SHOW?":
             self.dirty = reply.responses[0].fields.get("staged_dirty") == "1"
+            limits = reply.responses[-1].fields
+            self.capture_samples = int(limits.get("capture_samples", "256"))
+            self.capture.setText(f"Capture {self.capture_samples} samples")
             if self.preparing and not self.queue:
                 self.prepared = True
                 self.preparing = False

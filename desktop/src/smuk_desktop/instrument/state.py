@@ -17,6 +17,9 @@ class Measurement:
     window: int
     valid: bool
     quality: dict[str, str]
+    sample_rate_hz: int = 4000
+    group_samples: int = 1
+    integration_ms: int = 8
     received_at: float = field(default_factory=time.monotonic)
 
     @property
@@ -40,7 +43,12 @@ class Measurement:
         valid = f["valid"] == "1" and populated == window
         valid &= all(q.get(k) == "1" for k in ("fresh", "settled", "precision_ready"))
         valid &= all(q.get(k) == "0" for k in ("I_clip", "V_clip", "I_overload", "V_overload"))
-        return cls(voltage, current, bus, f["I"], f["V"], samples, populated, window, valid, q)
+        rate = int(f.get("rate_hz", "4000"))
+        group = int(f.get("group_samples", "1"))
+        integration = int(f.get("integration_ms", str(window // 4)))
+        if (rate, group) not in ((4000, 1), (32000, 8)) or integration * 4 != window:
+            raise ValueError("Inconsistent sample rate or precision integration metadata")
+        return cls(voltage, current, bus, f["I"], f["V"], samples, populated, window, valid, q, rate, group, integration)
 
 
 @dataclass
@@ -61,4 +69,5 @@ class InstrumentState:
     @property
     def live(self) -> bool:
         m = self.measurement
-        return bool(self.healthy and not self.pending_change and m and m.valid and time.monotonic() - m.received_at < 1.2 and self.status.get("valid") == "1")
+        rate_ok = self.acquisition.get("rate_known") != "1" or self.acquisition.get("rate_ok") == "1"
+        return bool(self.healthy and rate_ok and not self.pending_change and m and m.valid and time.monotonic() - m.received_at < 1.2 and self.status.get("valid") == "1")

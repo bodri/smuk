@@ -159,6 +159,9 @@ static void boot(void) {
     saved_record = force_busy = save_failure = readback_failure = false;
     safety_hw_init_safe();
     assert(smu_init());
+    assert(output().precision_window == 80);
+    /* The legacy health fixture exercises 8 ms after checking the boot default. */
+    assert(smu_measurement_set_precision_samples(32));
     smu_set_current_autorange(false);
     smu_set_voltage_autorange(false);
     assert(!output().fast.valid);
@@ -361,6 +364,7 @@ static void test_no_initial_frames(void) {
     now = 0;
     safety_hw_init_safe();
     assert(smu_init());
+    assert(output().precision_window == 80);
     for (unsigned i = 0; i < 999; ++i) {
         ++now;
         smu_process();

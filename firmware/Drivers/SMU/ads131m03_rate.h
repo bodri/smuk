@@ -1,0 +1,22 @@
+#ifndef ADS131M03_RATE_H
+#define ADS131M03_RATE_H
+
+/* Nominal rates with 8.192 MHz CLKIN, high-resolution power mode.
+ * Override at build time with -DADS131M03_SAMPLE_RATE_HZ=4000 for bench fallback. */
+#ifndef ADS131M03_SAMPLE_RATE_HZ
+#define ADS131M03_SAMPLE_RATE_HZ 32000u
+#endif
+#if ADS131M03_SAMPLE_RATE_HZ == 32000u
+#define ADS131M03_CLOCK_OSR_BITS 0x0000u
+#elif ADS131M03_SAMPLE_RATE_HZ == 4000u
+#define ADS131M03_CLOCK_OSR_BITS 0x000Cu
+#else
+#error "Supported ADS131M03 sample rates are 4000 and 32000 Hz"
+#endif
+
+#define SMU_PRECISION_RATE_HZ 4000u
+#define SMU_PRECISION_GROUP_SAMPLES (ADS131M03_SAMPLE_RATE_HZ / SMU_PRECISION_RATE_HZ)
+#define SMU_RATE_SCALE (ADS131M03_SAMPLE_RATE_HZ / 4000u)
+#define SMU_CAL_CAPTURE_SAMPLES (256u * SMU_RATE_SCALE)
+
+#endif

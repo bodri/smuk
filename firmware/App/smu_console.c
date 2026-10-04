@@ -12,7 +12,7 @@
 #include <string.h>
 #define LINE_SIZE 128u
 #define POINTS 8u
-#define CAPTURE_SAMPLES 256u
+#define CAPTURE_SAMPLES SMU_CAL_CAPTURE_SAMPLES
 #define CAPTURE_TIMEOUT_MS 2000u
 static char line[LINE_SIZE];
 static size_t used;
@@ -74,8 +74,8 @@ static bool stable(void) {
     const smu_context_t* ctx = smu_get_context();
     smu_measurement_outputs_t out;
     smu_get_measurement(&out);
-    return ctx->state == SMU_STATE_NORMAL && ctx->measurement_valid && !ctx->current_autorange && !ctx->voltage_autorange && out.fast.valid && !out.fast.overload && !out.fast.range_transition &&
-           out.fast.range == ctx->range && out.fast.vrange == ctx->vrange && ctx->input_10m_requested == ctx->input_10m_active;
+    return ctx->state == SMU_STATE_NORMAL && (!ctx->adc_rate_known || ctx->adc_rate_ok) && ctx->measurement_valid && !ctx->current_autorange && !ctx->voltage_autorange && out.fast.valid &&
+           !out.fast.overload && !out.fast.range_transition && out.fast.range == ctx->range && out.fast.vrange == ctx->vrange && ctx->input_10m_requested == ctx->input_10m_active;
 }
 
 static bool same_range(void) {
@@ -92,8 +92,8 @@ static void show_cal(void) {
     for (unsigned i = 0; i < 2; ++i)
         reply("V %s gain=%s offset_V=%s\r\n", vrange_name((smu_voltage_range_t)i), number(staged.measurement.voltage[i].gain, a), number(staged.measurement.voltage[i].offset, b));
     reply("BUS gain=%s offset_V=%s\r\n", number(staged.measurement.calbus.gain, a), number(staged.measurement.calbus.offset, b));
-    reply("CAPTURE LIMIT rms_codes=%s drift_codes=%s minimum_fit_span_codes=%u\r\n", number(capture_cfg.max_noise_codes, a), number(capture_cfg.max_drift_codes, b),
-          capture_cfg.minimum_fit_span_codes);
+    reply("CAPTURE LIMIT rms_codes=%s drift_codes=%s minimum_fit_span_codes=%u capture_samples=%u capture_ms=64\r\n", number(capture_cfg.max_noise_codes, a), number(capture_cfg.max_drift_codes, b),
+          capture_cfg.minimum_fit_span_codes, CAPTURE_SAMPLES);
 }
 
 static float nominal_from_code(float code) {
@@ -218,9 +218,10 @@ static void command(char* text) {
         reply("WATCHDOG active=%u reset=%u\r\n", smu_watchdog_active(), smu_watchdog_was_reset());
     } else if (!strcmp(text, "ACQ?") && !*arg) {
         const smu_context_t* c = smu_get_context();
-        reply("ACQ stale=%u age_ms=%lu gaps=%lu pauses=%lu crc=%lu spi=%lu busy=%lu overruns=%lu log_dropped=%lu\r\n", c->acquisition_stale, (unsigned long)c->measurement_age_ms,
-              (unsigned long)c->acquisition_gap_count, (unsigned long)c->acquisition_pause_count, (unsigned long)c->adc_crc_errors, (unsigned long)c->adc_spi_errors, (unsigned long)c->adc_busy_count,
-              (unsigned long)c->adc_overruns, (unsigned long)smu_log_dropped());
+        reply("ACQ stale=%u age_ms=%lu gaps=%lu pauses=%lu crc=%lu spi=%lu busy=%lu overruns=%lu log_dropped=%lu rate_hz=%lu frame_hz=%lu drdy_hz=%lu rate_known=%u rate_ok=%u\r\n",
+              c->acquisition_stale, (unsigned long)c->measurement_age_ms, (unsigned long)c->acquisition_gap_count, (unsigned long)c->acquisition_pause_count, (unsigned long)c->adc_crc_errors,
+              (unsigned long)c->adc_spi_errors, (unsigned long)c->adc_busy_count, (unsigned long)c->adc_overruns, (unsigned long)smu_log_dropped(), (unsigned long)ADS131M03_SAMPLE_RATE_HZ,
+              (unsigned long)c->adc_frame_hz, (unsigned long)c->adc_drdy_hz, c->adc_rate_known, c->adc_rate_ok);
     } else if ((!strcmp(text, "MEAS?") || !strcmp(text, "RAW?")) && !*arg) {
         smu_measurement_outputs_t out;
         smu_get_measurement(&out);
@@ -230,8 +231,9 @@ static void command(char* text) {
         if (raw)
             reply("RAW I=%ld V=%ld BUS=%ld valid=%u\r\n", (long)m->adc_i_raw, (long)m->adc_v_raw, (long)m->adc_cal_raw, m->valid);
         else
-            reply("MEAS I_A=%s V_V=%s BUS_V=%s I=%s V=%s valid=%u samples=%lu window=%u/%u\r\n", number(m->current_A, a), number(m->voltage_V, b), number(m->calbus_V, c), irange_name(m->range),
-                  vrange_name(m->vrange), m->valid, (unsigned long)out.sample_count, out.precision_count, out.precision_window);
+            reply("MEAS I_A=%s V_V=%s BUS_V=%s I=%s V=%s valid=%u samples=%lu window=%u/%u rate_hz=%lu group_samples=%u integration_ms=%u\r\n", number(m->current_A, a), number(m->voltage_V, b),
+                  number(m->calbus_V, c), irange_name(m->range), vrange_name(m->vrange), m->valid, (unsigned long)out.sample_count, out.precision_count, out.precision_window,
+                  (unsigned long)ADS131M03_SAMPLE_RATE_HZ, SMU_PRECISION_GROUP_SAMPLES, out.precision_window / (SMU_PRECISION_RATE_HZ / 1000u));
         reply("QUALITY fresh=%u settled=%u precision_ready=%u I_clip=%u V_clip=%u BUS_clip=%u I_overload=%u V_overload=%u\r\n", m->fresh, m->settled, out.precision_ready, m->current_clipped,
               m->voltage_clipped, m->calbus_clipped, m->current_overload, m->voltage_overload);
     } else if (!strcmp(text, "CAL:ABORT") && !*arg) {
@@ -290,7 +292,7 @@ static void command(char* text) {
             (void)smu_cal_capture_init(&capture, CAPTURE_SAMPLES);
             capturing = true;
             started = smu_port_millis();
-            reply("OK acquiring 256 samples\r\n");
+            reply("OK acquiring %u samples\r\n", CAPTURE_SAMPLES);
         }
     } else if (!strcmp(text, "INTEGRATION")) {
         if (capturing) {
