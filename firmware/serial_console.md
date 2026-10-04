@@ -44,7 +44,7 @@ and conversion clock continue unchanged during a save.
 | `AUTORANGE ON` / `OFF` or `AUTORANGE:I ON` / `OFF` | Control current autorange |
 | `AUTORANGE:V ON` / `OFF` | Control voltage autorange independently |
 | `IMPEDANCE 10M` / `HIGHZ` | Select differential input loading; wait for `valid=1` |
-| `INTEGRATION 1MS` / `8MS` / `20MS` / `50MS` / `100MS` | Select precision integration window; default 20 ms |
+| `INTEGRATION 500US` / `1MS` / `2MS` / `5MS` / `8MS` / `10MS` / `20MS` / `50MS` / `100MS` | Select precision integration window; default 2 ms |
 | `CAL:SHOW?` | Coefficients, dirty flag, Flash sequence, FLASH/DEFAULTS provenance and capture limits |
 | `CAL:BEGIN V` / `I` / `BUS` | Start a point set for the selected fixed range/channel |
 | `CAL:CAPTURE <reference>` | Average 2,048 fresh accepted raw ADC samples at 32 kSPS (256 in the 4 kSPS fallback); reference in volts for V/BUS or amperes for I |
@@ -108,10 +108,13 @@ frames after a long foreground pause. Thresholds can be tuned through
 
 ## Precision integration
 
-Select `INTEGRATION 1MS`, `8MS`, `20MS`, `50MS`, or `100MS`. The boot default is
-**20 ms**. At 32 kSPS these include 32, 256, 640, 1,600, and 3,200 raw samples.
+Select `INTEGRATION 500US`, `1MS`, `2MS`, `5MS`, `8MS`, `10MS`, `20MS`, `50MS`, or `100MS`. The boot default is
+**2 ms** (64 raw samples at 32 kSPS). The 500 µs option uses 16 raw samples.
+`MEAS? integration_us` reports the exact duration; `integration_ms` is truncated
+for compatibility with older clients. Longer windows remain available for noise
+reduction and mains rejection.
 Every group of eight samples contributes its mean to a 4 kHz rolling precision
-window, keeping RAM use bounded. Group counts are 4, 32, 80, 200, and 400.
+window, keeping RAM use bounded. Group counts are 2, 4, 8, 20, 32, 40, 80, 200, and 400.
 `MEAS? window=80/80 rate_hz=32000 group_samples=8 integration_ms=20` therefore
 means a full 640-sample, nominal 20 ms window. `samples` counts accepted raw frames.
 Precision updates at group boundaries; within a group it retains the last complete
@@ -129,7 +132,7 @@ on their agreement with the selected window. These are sample-based windows,
 not a line-synchronized ADC mode. Integration changes are rejected during a
 capture and clear its point set while preserving previously staged fits.
 After selecting a window, wait for `MEAS? valid=1` before trusting precision
-readings. This setting is volatile and returns to 20 ms after reset.
+readings. This setting is volatile and returns to 2 ms after reset.
 
 ### 32 kSPS acquisition and bench acceptance
 

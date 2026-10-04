@@ -71,3 +71,13 @@ def test_32ksps_precision_metadata():
     assert m.window * m.group_samples == 640
     with pytest.raises(ValueError):
         Measurement.from_responses(parse_line(text.replace("group_samples=8", "group_samples=1")), parse_line(QUALITY))
+
+
+def test_submillisecond_integration():
+    from test_controller import MEAS, QUALITY
+    text = MEAS.replace("window=32/32", "window=2/2") + " rate_hz=32000 group_samples=8 integration_ms=0 integration_us=500"
+    m = Measurement.from_responses(parse_line(text), parse_line(QUALITY))
+    assert m.valid and m.integration_ms == 0.5
+    assert m.window * m.group_samples == 16
+    validate_command("INTEGRATION 500US")
+    validate_command("INTEGRATION 2MS")

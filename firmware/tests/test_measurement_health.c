@@ -159,7 +159,7 @@ static void boot(void) {
     saved_record = force_busy = save_failure = readback_failure = false;
     safety_hw_init_safe();
     assert(smu_init());
-    assert(output().precision_window == 80);
+    assert(output().precision_window == 8);
     /* The legacy health fixture exercises 8 ms after checking the boot default. */
     assert(smu_measurement_set_precision_samples(32));
     smu_set_current_autorange(false);
@@ -364,7 +364,7 @@ static void test_no_initial_frames(void) {
     now = 0;
     safety_hw_init_safe();
     assert(smu_init());
-    assert(output().precision_window == 80);
+    assert(output().precision_window == 8);
     for (unsigned i = 0; i < 999; ++i) {
         ++now;
         smu_process();
@@ -419,6 +419,17 @@ static void test_health_wrap_and_windows(void) {
 }
 
 int main(void) {
+    boot();
+    assert(smu_set_integration_us(500) == SMU_OK);
+    assert(output().precision_window == 2 && !output().precision.valid);
+    assert(smu_set_integration_ms(2) == SMU_OK);
+    assert(output().precision_window == 8);
+    assert(smu_set_integration_ms(5) == SMU_OK);
+    assert(output().precision_window == 20);
+    assert(smu_set_integration_ms(10) == SMU_OK);
+    assert(output().precision_window == 40);
+    assert(smu_set_integration_us(501) == SMU_ERR_ARG);
+    assert(output().precision_window == 40);
     test_flags_and_clipping();
     test_stale_and_recovery();
     test_gap_and_errors();

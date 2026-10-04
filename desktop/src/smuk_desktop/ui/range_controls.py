@@ -25,7 +25,7 @@ class RangeControls(QFrame):
         self.impedance = self._selector(layout, "INPUT IMPEDANCE", ("10M", "HIGHZ"))
         self.impedance.activated.connect(lambda _: self.command.emit(f"IMPEDANCE {self.impedance.currentText()}"))
         self.integration = self._selector(layout, "INTEGRATION", INTEGRATIONS)
-        self.integration.setCurrentText("20MS")
+        self.integration.setCurrentText("2MS")
         self.integration.activated.connect(lambda _: self.command.emit(f"INTEGRATION {self.integration.currentText()}"))
         note = QLabel("Measurement only\nPA unavailable")
         note.setObjectName("muted")
@@ -63,4 +63,4 @@ class RangeControls(QFrame):
         self._confirm(self.impedance, s.get("impedance_requested", "10M"))
         m = state.measurement
         if m:
-            self._confirm(self.integration, {4: "1MS", 32: "8MS", 80: "20MS", 200: "50MS", 400: "100MS"}.get(m.window, "8MS"))
+            self._confirm(self.integration, {2: "500US", 4: "1MS", 8: "2MS", 20: "5MS", 32: "8MS", 40: "10MS", 80: "20MS", 200: "50MS", 400: "100MS"}.get(m.window, "8MS"))

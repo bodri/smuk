@@ -62,7 +62,7 @@ bool smu_init(void) {
      */
     smu_cal_store_init();
     smu_calibration_init();
-    (void)smu_measurement_set_precision_samples(20u * (SMU_PRECISION_RATE_HZ / 1000u));
+    (void)smu_measurement_set_precision_samples(2u * (SMU_PRECISION_RATE_HZ / 1000u));
     smu_cal_debug_init();
     smu_range_init(&ranges);
     smu_calibration_set_save_hooks(calibration_save_begin, calibration_save_end);
@@ -317,16 +317,21 @@ smu_status_t smu_set_voltage_range(smu_voltage_range_t range) {
     return SMU_OK;
 }
 
-smu_status_t smu_set_integration_ms(uint16_t milliseconds) {
-    if (milliseconds != 1u && milliseconds != 8u && milliseconds != 20u && milliseconds != 50u && milliseconds != 100u)
+smu_status_t smu_set_integration_us(uint32_t microseconds) {
+    if (microseconds != 500u && microseconds != 1000u && microseconds != 2000u && microseconds != 5000u && microseconds != 8000u && microseconds != 10000u && microseconds != 20000u &&
+        microseconds != 50000u && microseconds != 100000u)
         return SMU_ERR_ARG;
     if (g.state != SMU_STATE_NORMAL || smu_range_busy(&ranges))
         return SMU_ERR_STATE;
-    const uint16_t samples = (uint16_t)(milliseconds * (SMU_PRECISION_RATE_HZ / 1000u));
+    const uint16_t samples = (uint16_t)(microseconds / (1000000u / SMU_PRECISION_RATE_HZ));
     if (!smu_measurement_set_precision_samples(samples))
         return SMU_ERR_ARG;
     update_measurement_context();
     return SMU_OK;
+}
+
+smu_status_t smu_set_integration_ms(uint16_t milliseconds) {
+    return smu_set_integration_us((uint32_t)milliseconds * 1000u);
 }
 
 smu_acquisition_config_t* smu_acquisition_config(void) {

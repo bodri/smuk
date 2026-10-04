@@ -199,7 +199,8 @@ static void command(char* text) {
     if (!arg)
         arg = "";
     if (!strcmp(text, "HELP") && !*arg) {
-        reply("STATUS? ACQ? MEAS? RAW? CAL:SHOW? ECHO ON|OFF; INTEGRATION 1MS|8MS|20MS|50MS|100MS; IMPEDANCE 10M|HIGHZ\r\nRANGE:I 1.5A|100MA|10MA|1MA|100UA; RANGE:V 15V|6V; AUTORANGE[:I|:V] "
+        reply("STATUS? ACQ? MEAS? RAW? CAL:SHOW? ECHO ON|OFF; INTEGRATION 500US|1MS|2MS|5MS|8MS|10MS|20MS|50MS|100MS; IMPEDANCE 10M|HIGHZ\r\nRANGE:I 1.5A|100MA|10MA|1MA|100UA; RANGE:V 15V|6V; "
+              "AUTORANGE[:I|:V] "
               "ON|OFF\r\nCAL:BEGIN V|I|BUS; CAL:CAPTURE "
               "<reference in V/A>; CAL:FIT; "
               "CAL:POINTS?\r\nCAL:SAVE; CAL:RESET; CAL:ABORT; PING\r\n");
@@ -231,9 +232,10 @@ static void command(char* text) {
         if (raw)
             reply("RAW I=%ld V=%ld BUS=%ld valid=%u\r\n", (long)m->adc_i_raw, (long)m->adc_v_raw, (long)m->adc_cal_raw, m->valid);
         else
-            reply("MEAS I_A=%s V_V=%s BUS_V=%s I=%s V=%s valid=%u samples=%lu window=%u/%u rate_hz=%lu group_samples=%u integration_ms=%u\r\n", number(m->current_A, a), number(m->voltage_V, b),
-                  number(m->calbus_V, c), irange_name(m->range), vrange_name(m->vrange), m->valid, (unsigned long)out.sample_count, out.precision_count, out.precision_window,
-                  (unsigned long)ADS131M03_SAMPLE_RATE_HZ, SMU_PRECISION_GROUP_SAMPLES, out.precision_window / (SMU_PRECISION_RATE_HZ / 1000u));
+            reply("MEAS I_A=%s V_V=%s BUS_V=%s I=%s V=%s valid=%u samples=%lu window=%u/%u rate_hz=%lu group_samples=%u integration_ms=%u integration_us=%lu\r\n", number(m->current_A, a),
+                  number(m->voltage_V, b), number(m->calbus_V, c), irange_name(m->range), vrange_name(m->vrange), m->valid, (unsigned long)out.sample_count, out.precision_count, out.precision_window,
+                  (unsigned long)ADS131M03_SAMPLE_RATE_HZ, SMU_PRECISION_GROUP_SAMPLES, out.precision_window / (SMU_PRECISION_RATE_HZ / 1000u),
+                  (unsigned long)out.precision_window * (1000000u / SMU_PRECISION_RATE_HZ));
         reply("QUALITY fresh=%u settled=%u precision_ready=%u I_clip=%u V_clip=%u BUS_clip=%u I_overload=%u V_overload=%u\r\n", m->fresh, m->settled, out.precision_ready, m->current_clipped,
               m->voltage_clipped, m->calbus_clipped, m->current_overload, m->voltage_overload);
     } else if (!strcmp(text, "CAL:ABORT") && !*arg) {
@@ -299,12 +301,12 @@ static void command(char* text) {
             reply("ERR capture busy\r\n");
             return;
         }
-        const char* names[] = {"1MS", "8MS", "20MS", "50MS", "100MS"};
-        const uint16_t times[] = {1, 8, 20, 50, 100};
+        const char* names[] = {"500US", "1MS", "2MS", "5MS", "8MS", "10MS", "20MS", "50MS", "100MS"};
+        const uint32_t times[] = {500, 1000, 2000, 5000, 8000, 10000, 20000, 50000, 100000};
         smu_status_t result = SMU_ERR_ARG;
-        for (unsigned i = 0; i < 5; ++i)
+        for (unsigned i = 0; i < sizeof(times) / sizeof(times[0]); ++i)
             if (!strcmp(arg, names[i]))
-                result = smu_set_integration_ms(times[i]);
+                result = smu_set_integration_us(times[i]);
         if (result == SMU_OK) {
             target = TARGET_NONE;
             points = 0;

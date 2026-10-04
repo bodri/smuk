@@ -19,7 +19,7 @@ class Measurement:
     quality: dict[str, str]
     sample_rate_hz: int = 4000
     group_samples: int = 1
-    integration_ms: int = 8
+    integration_ms: float = 8
     received_at: float = field(default_factory=time.monotonic)
 
     @property
@@ -45,7 +45,7 @@ class Measurement:
         valid &= all(q.get(k) == "0" for k in ("I_clip", "V_clip", "I_overload", "V_overload"))
         rate = int(f.get("rate_hz", "4000"))
         group = int(f.get("group_samples", "1"))
-        integration = int(f.get("integration_ms", str(window // 4)))
+        integration = int(f["integration_us"]) / 1000 if "integration_us" in f else float(f.get("integration_ms", str(window / 4)))
         if (rate, group) not in ((4000, 1), (32000, 8)) or integration * 4 != window:
             raise ValueError("Inconsistent sample rate or precision integration metadata")
         return cls(voltage, current, bus, f["I"], f["V"], samples, populated, window, valid, q, rate, group, integration)

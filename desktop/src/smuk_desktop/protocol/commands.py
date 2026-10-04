@@ -3,7 +3,7 @@ import math
 import re
 VOLTAGE_RANGES = ("15V", "6V")
 CURRENT_RANGES = ("1.5A", "100MA", "10MA", "1MA", "100UA")
-INTEGRATIONS = ("1MS", "8MS", "20MS", "50MS", "100MS")
+INTEGRATIONS = ("500US", "1MS", "2MS", "5MS", "8MS", "10MS", "20MS", "50MS", "100MS")
 QUERIES = {"PING", "STATUS?", "MEAS?", "RAW?", "ACQ?", "HELP", "CAL:SHOW?", "CAL:POINTS?"}
 VALUES = {
     "RANGE:V": VOLTAGE_RANGES,

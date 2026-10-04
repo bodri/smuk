@@ -54,8 +54,8 @@ void smu_get_measurement(smu_measurement_outputs_t* out) {
     smu_measurement_get_outputs(out);
 }
 
-smu_status_t smu_set_integration_ms(uint16_t ms) {
-    return smu_measurement_set_precision_samples(ms * 4u) ? SMU_OK : SMU_ERR_ARG;
+smu_status_t smu_set_integration_us(uint32_t us) {
+    return smu_measurement_set_precision_samples(us / 250u) ? SMU_OK : SMU_ERR_ARG;
 }
 
 smu_status_t smu_set_input_10m(bool value) {
@@ -238,6 +238,12 @@ int main(void) {
     lost = true;
     send("PING\nPING\n");
     assert(strstr(output, "RX loss") && strstr(output, "PONG"));
+    send("INTEGRATION 500US\n");
+    assert(strstr(output, "OK integration"));
+    send("MEAS?\n");
+    assert(strstr(output, "integration_ms=0 integration_us=500"));
+    send("INTEGRATION 2MS\n");
+    assert(strstr(output, "OK integration"));
     send("INTEGRATION 20MS\n");
     assert(strstr(output, "OK integration"));
     assert(!strstr(output, "ERR"));

@@ -42,8 +42,8 @@ If firmware resets or a command times out, reconnect explicitly.
 - Precision measurement polling at approximately 5 Hz; status at 1 Hz and
   acquisition diagnostics at 0.5 Hz, without an accumulating polling backlog.
 - Current ranges: 1.5 A, 100 mA, 10 mA, 1 mA, 100 µA. Voltage ranges: 15 V and 6 V.
-- Independent autorange, 10 MΩ/HIGHZ input, and 1/8/20/50/100 ms integration controls.
-  New firmware defaults to 32 kSPS acquisition and 20 ms integration. The display
+- Independent autorange, 10 MΩ/HIGHZ input, and 0.5/1/2/5/8/10/20/50/100 ms integration controls.
+  New firmware defaults to 32 kSPS acquisition and 2 ms integration. The display
   shows raw-sample coverage (640 samples for 20 ms), and acquisition diagnostics
   show the delivered rate. A known rate mismatch inhibits live precision readings.
 - Invalid, settling, stale, clipped, faulted, and disconnected data is dimmed or labelled.
