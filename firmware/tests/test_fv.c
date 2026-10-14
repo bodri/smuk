@@ -33,9 +33,9 @@ bool safety_hw_request_pa_enable(void) {
 
 bool smu_fv_port_init(smu_fv_config_t* c) {
     pa = relay = false;
-    *c = (smu_fv_config_t){3.3f, 1.65f, 10.0f, -2.0f, 2.0f, 1.0f, 0.05f, true, false};
+    *c = (smu_fv_config_t){3.3f, 1.65f, 10.0f, -2.0f, 2.0f, 1.0f, 0.05f, true, false, false};
     if (unipolar)
-        *c = (smu_fv_config_t){3.3f, 0.0f, 1.0f, 0.0f, 1.0f, 1.0f, 0.05f, false, true};
+        *c = (smu_fv_config_t){3.3f, 0.0f, 5.0f, 0.0f, 1.0f, 1.0f, 0.05f, false, true, true};
     return available;
 }
 
@@ -172,6 +172,7 @@ int main(void) {
     start();
     now += 10;
     smu_fv_process();
+    assert(last_code == (uint16_t)lroundf((smu_fv_status()->applied_V / 5.0f) * 4095.0f / 3.3f));
     assert(last_code > 0 && smu_fv_status()->applied_V > 0);
     assert(smu_fv_output(false) == SMU_OK && last_code == 0);
     assert(smu_fv_status()->pa_always_enabled);

@@ -4,7 +4,7 @@ from PySide6.QtCore import QObject, QTimer, Signal
 from ..protocol.commands import validate_command, changes_measurement
 from ..protocol.parser import Transaction, parse_line
 from .connection import SerialConnection
-from .state import InstrumentState, Measurement
+from .state import InstrumentState, Measurement, Source
 from .statistics import Statistics
 
 
@@ -26,6 +26,7 @@ class Controller(QObject):
         self.last_status = self.last_acq = 0.0
         self.cal_sequence: str | None = None
         self.calibration_active = False
+        self.source_supported = True
         self.calibration_points = 0
         self.calibration_records = ()
         self.timeout = QTimer(self)
@@ -54,6 +55,8 @@ class Controller(QObject):
         self.changed.emit()
 
     def _stop(self):
+        self.state.source = None
+        self.state.source_pending = False
         self.timeout.stop()
         self.poll_timer.stop()
         self.transaction = None
@@ -65,6 +68,7 @@ class Controller(QObject):
 
     def _opened(self, path):
         self.state.port = path
+        self.source_supported = True
         self.handshaking = True
         self.changed.emit()
         self.user_queue.append("PING")
@@ -89,7 +93,7 @@ class Controller(QObject):
         self._failed(f"Timeout waiting for {command}. Reconnect to resynchronize.")
 
     def reserve_calibration(self):
-        if not self.state.healthy or self.user_queue or self.calibration_active:
+        if not self.state.healthy or self.user_queue or self.calibration_active or (self.state.source and (not self.state.source_known or self.state.source.state not in (0, 1))) or self.state.source_pending:
             return False
         self.calibration_active = True
         self.poll_queue.clear()
@@ -97,7 +101,7 @@ class Controller(QObject):
         return True
 
     def send(self, text: str, *, calibration: bool = False):
-        if self.calibration_active and not calibration:
+        if self.calibration_active and not calibration and text.strip().upper() != "OUTPUT OFF":
             self.error.emit("Finish or close manual calibration before sending other commands")
             return
         if calibration and not self.calibration_active:
@@ -111,10 +115,31 @@ class Controller(QObject):
         except ValueError as error:
             self.error.emit(str(error))
             return
+        source_change = command.startswith("SOURCE:V ") or command.startswith("OUTPUT ")
+        if command == "OUTPUT ON":
+            reasons = self.state.source_prerequisites
+            if self.calibration_active or self.state.source_pending or not self.state.source_known or self.state.source.state != 1 or reasons:
+                self.error.emit("Cannot enable output: " + "; ".join(reasons or ["Source is busy, tripped, or calibration is active"]))
+                return
+        if command.startswith("SOURCE:V "):
+            source = self.state.source
+            if not self.state.source_known or source.state not in (1, 2, 3) or self.state.source_pending or not source.minimum <= float(command.split()[1]) <= source.maximum:
+                self.error.emit("Voltage request outside confirmed bounds or source status unavailable")
+                return
+        if command == "OUTPUT OFF":
+            self.user_queue = deque(c for c in self.user_queue if not c.startswith(("SOURCE:V ", "OUTPUT ")))
+            self.user_queue.appendleft(command)
+            self.state.source_pending = True
+            self.changed.emit()
+            self._pump()
+            return
         if len(self.user_queue) >= 16:
             self.error.emit("Command queue is full; wait for the instrument")
             return
         self.user_queue.append(command)
+        if source_change:
+            self.state.source_pending = True
+            self.changed.emit()
         if changes_measurement(command):
             self.state.pending_change = True
             self.changed.emit()
@@ -141,6 +166,8 @@ class Controller(QObject):
         if now - self.last_status >= 1:
             self._enqueue_poll("STATUS?")
             self.last_status = now
+            if self.source_supported and not self.calibration_active:
+                self._enqueue_poll("SOURCE?")
         if now - self.last_acq >= 2:
             self._enqueue_poll("ACQ?")
             self.last_acq = now
@@ -176,9 +203,16 @@ class Controller(QObject):
                 if self.handshaking:
                     self._failed(reply.error)
                     return
-                self.state.message = reply.error
-                self.error.emit(reply.error)
-                self._enqueue_poll("STATUS?")
+                if reply.command == "SOURCE?":
+                    self.state.source = None
+                    self.state.source_pending = False
+                    self.source_supported = False
+                elif reply.command.startswith(("SOURCE:V ", "OUTPUT ")):
+                    self._enqueue_poll("SOURCE?")
+                if reply.command != "SOURCE?":
+                    self.state.message = reply.error
+                    self.error.emit(reply.error)
+                    self._enqueue_poll("STATUS?")
             else:
                 self._apply(reply)
             self.reply_completed.emit(reply)
@@ -195,9 +229,22 @@ class Controller(QObject):
             self.state.message = "Connected"
             self.statistics.reset()
             self.cal_sequence = None
-            self.user_queue.extend(("ECHO OFF", "STATUS?", "CAL:SHOW?", "ACQ?", "MEAS?"))
+            self.user_queue.extend(("ECHO OFF", "STATUS?", "CAL:SHOW?", "ACQ?", "MEAS?", "SOURCE?"))
             self.last_status = self.last_acq = time.monotonic()
             self.poll_timer.start()
+        elif reply.command == "SOURCE?":
+            fields = records["SOURCE"].fields
+            if not {"minimum_V", "maximum_V", "slew_V_s", "relay_available"}.issubset(fields):
+                self.source_supported = False
+                self.state.source = None
+            else:
+                self.state.source = Source.from_response(records["SOURCE"])
+                self.source_supported = True
+            self.state.source_pending = any(c.startswith(("SOURCE:V ", "OUTPUT ")) for c in self.user_queue)
+        elif reply.command.startswith(("SOURCE:V ", "OUTPUT ")):
+            self._enqueue_poll("SOURCE?")
+            self._enqueue_poll("STATUS?")
+            self._enqueue_poll("MEAS?")
         elif reply.command == "STATUS?":
             status = records["STATUS"].fields
             for key in ("state", "faults", "valid", "autorange", "autorange_v", "frames"):

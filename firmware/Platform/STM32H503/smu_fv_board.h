@@ -6,9 +6,9 @@
 #ifndef SMU_FV_HW_CONFIRMED
 #define SMU_FV_HW_CONFIRMED 1
 #endif
-/* Confirmed PA mapping: direct unipolar command, no output relay fitted yet. */
+/* Confirmed PA mapping: gain 5, direct unipolar command, no output relay fitted yet. */
 #ifndef SMU_FV_GAIN
-#define SMU_FV_GAIN 1.0f
+#define SMU_FV_GAIN 5.0f
 #endif
 #ifndef SMU_FV_ZERO_DAC_V
 #define SMU_FV_ZERO_DAC_V 0.0f

@@ -51,6 +51,33 @@ class Measurement:
         return cls(voltage, current, bus, f["I"], f["V"], samples, populated, window, valid, q, rate, group, integration)
 
 
+@dataclass(frozen=True)
+class Source:
+    state: int
+    requested: float
+    applied: float
+    minimum: float
+    maximum: float
+    slew: float
+    pa_always_enabled: bool
+    relay_available: bool
+    received_at: float = field(default_factory=time.monotonic)
+
+    @classmethod
+    def from_response(cls, response):
+        f = response.fields
+        values = [float(f[k]) for k in ("requested_V", "applied_V", "minimum_V", "maximum_V", "slew_V_s")]
+        state = int(f["state"])
+        if f["mode"] != "FV" or state not in range(5) or not all(math.isfinite(v) for v in values):
+            raise ValueError("Invalid FV source metadata")
+        requested, applied, minimum, maximum, slew = values
+        if state != 0 and (minimum >= maximum or slew <= 0 or not minimum <= requested <= maximum or not minimum <= applied <= maximum):
+            raise ValueError("Invalid FV source bounds")
+        if f["pa_always_enabled"] not in ("0", "1") or f["relay_available"] not in ("0", "1"):
+            raise ValueError("Invalid FV hardware capabilities")
+        return cls(state, *values, f["pa_always_enabled"] == "1", f["relay_available"] == "1")
+
+
 @dataclass
 class InstrumentState:
     connected: bool = False
@@ -61,6 +88,8 @@ class InstrumentState:
     watchdog: dict[str, str] = field(default_factory=dict)
     measurement: Measurement | None = None
     message: str = "Disconnected"
+    source: Source | None = None
+    source_pending: bool = False
 
     @property
     def healthy(self) -> bool:
@@ -71,3 +100,30 @@ class InstrumentState:
         m = self.measurement
         rate_ok = self.acquisition.get("rate_known") != "1" or self.acquisition.get("rate_ok") == "1"
         return bool(self.healthy and rate_ok and not self.pending_change and m and m.valid and time.monotonic() - m.received_at < 1.2 and self.status.get("valid") == "1")
+
+    @property
+    def source_known(self) -> bool:
+        return bool(self.connected and self.source and time.monotonic() - self.source.received_at < 3)
+
+    @property
+    def source_busy(self) -> bool:
+        return bool(self.source_known and self.source.state in (2, 3))
+
+    @property
+    def source_prerequisites(self) -> list[str]:
+        reasons = []
+        if not self.source_known or self.source.state == 0:
+            reasons.append("FV source unavailable or status unknown")
+        if not self.live:
+            reasons.append("Wait for healthy, settled acquisition")
+        if self.acquisition.get("rate_known") != "1" or self.acquisition.get("rate_ok") != "1":
+            reasons.append("Wait for confirmed ADC sample rate")
+        if self.status.get("autorange") != "0" or self.status.get("autorange_v") != "0":
+            reasons.append("Turn both autoranges OFF")
+        if self.status.get("I") != "1.5A":
+            reasons.append("Select the 1.5 A current range")
+        if self.status.get("impedance") != "HIGHZ" or self.status.get("impedance_requested") != "HIGHZ":
+            reasons.append("Select HIGHZ input")
+        if self.status.get("capture") != "0":
+            reasons.append("End calibration capture")
+        return reasons

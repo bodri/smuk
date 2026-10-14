@@ -205,9 +205,10 @@ static void command(char* text) {
     }
     if (!strcmp(text, "SOURCE?") && !*arg) {
         const smu_fv_status_t* source = smu_fv_status();
-        char requested[32], applied[32];
-        reply("SOURCE mode=FV state=%u requested_V=%s applied_V=%s code=%u backend=STM32_DAC pa_always_enabled=%u\r\n", source->state, number(source->requested_V, requested),
-              number(source->applied_V, applied), source->code, source->pa_always_enabled);
+        char requested[32], applied[32], minimum[32], maximum[32], slew[32];
+        reply("SOURCE mode=FV state=%u requested_V=%s applied_V=%s code=%u backend=STM32_DAC pa_always_enabled=%u relay_available=%u minimum_V=%s maximum_V=%s slew_V_s=%s\r\n", source->state,
+              number(source->requested_V, requested), number(source->applied_V, applied), source->code, source->pa_always_enabled, source->relay_available, number(source->minimum_V, minimum),
+              number(source->maximum_V, maximum), number(source->slew_V_per_s, slew));
     } else if (!strcmp(text, "SOURCE:V")) {
         float voltage;
         const smu_status_t result = capturing || target != TARGET_NONE ? SMU_ERR_STATE : parse_reference(arg, &voltage) ? smu_fv_set_voltage(voltage) : SMU_ERR_ARG;
@@ -227,8 +228,7 @@ static void command(char* text) {
               "AUTORANGE[:I|:V] "
               "ON|OFF\r\nCAL:BEGIN V|I|BUS; CAL:CAPTURE "
               "<reference in V/A>; CAL:FIT; "
-              "CAL:POINTS?\r\nCAL:SAVE; CAL:RESET; CAL:ABORT; PING\r\n");
-        reply("SOURCE? SOURCE:V <volts>; OUTPUT ON|OFF (FV prototype; confirmed hardware required)\r\n");
+              "CAL:POINTS?\r\nCAL:SAVE; CAL:RESET; CAL:ABORT; SOURCE?; SOURCE:V <volts>; OUTPUT ON|OFF; PING\r\n");
     } else if (!strcmp(text, "PING") && !*arg)
         reply("PONG\r\n");
     else if (!strcmp(text, "ECHO") && (!strcmp(arg, "ON") || !strcmp(arg, "OFF"))) {

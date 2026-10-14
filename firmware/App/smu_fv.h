@@ -9,6 +9,8 @@ typedef struct {
     float requested_V, applied_V;
     uint16_t code;
     bool pa_always_enabled;
+    bool relay_available;
+    float minimum_V, maximum_V, slew_V_per_s;
 } smu_fv_status_t;
 
 void smu_fv_init(void);

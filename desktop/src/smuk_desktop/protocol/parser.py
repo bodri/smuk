@@ -28,7 +28,7 @@ def parse_line(text: str) -> Response:
     for token in text.split()[1:]:
         if "=" in token:
             key, value = token.split("=", 1)
-            if key in fields and kind in {"STATUS", "MEAS", "RAW", "QUALITY", "ACQ", "WATCHDOG", "CAL", "I", "V", "BUS", "CAPTURE", "POINT", "OK", "ERR"}:
+            if key in fields and kind in {"SOURCE", "STATUS", "MEAS", "RAW", "QUALITY", "ACQ", "WATCHDOG", "CAL", "I", "V", "BUS", "CAPTURE", "POINT", "OK", "ERR"}:
                 raise ValueError(f"Duplicate response field: {key}")
             fields[key] = value
     if text.startswith("SMUK serial ready") or "ADS131M03 bring-up" in text:
@@ -68,12 +68,12 @@ class Transaction:
                 if expected + 1 == self.point_count:
                     return Reply(self.command, tuple(self.responses))
             return None
-        primary = {"PING": "PONG", "STATUS?": "STATUS", "MEAS?": "MEAS", "RAW?": "RAW", "ACQ?": "ACQ", "CAL:SHOW?": "CAL"}.get(self.command)
+        primary = {"PING": "PONG", "STATUS?": "STATUS", "MEAS?": "MEAS", "RAW?": "RAW", "ACQ?": "ACQ", "CAL:SHOW?": "CAL", "SOURCE?": "SOURCE"}.get(self.command)
         if primary:
             if response.kind == primary:
                 self.primary_seen = True
                 self.responses.append(response)
-                if self.command in ("PING", "ACQ?"):
+                if self.command in ("PING", "ACQ?", "SOURCE?"):
                     return Reply(self.command, tuple(self.responses))
             elif self.primary_seen:
                 if self.command == "STATUS?" and response.kind in ("QUALITY", "WATCHDOG"):

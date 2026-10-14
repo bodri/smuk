@@ -9,6 +9,7 @@ typedef struct {
     float maximum_current_A;
     bool dac_buffered;
     bool pa_enable_stub;
+    bool relay_stub;
 } smu_fv_config_t;
 
 /* All port functions are foreground only. init must leave PA and relay OFF. */

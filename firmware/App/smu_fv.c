@@ -54,6 +54,10 @@ void smu_fv_init(void) {
     memset(&config, 0, sizeof(config));
     const bool ready = smu_fv_port_init(&config);
     status.pa_always_enabled = config.pa_enable_stub;
+    status.relay_available = !config.relay_stub;
+    status.minimum_V = config.minimum_V;
+    status.maximum_V = config.maximum_V;
+    status.slew_V_per_s = config.slew_V_per_s;
     if (!ready)
         return;
     const bool valid = isfinite(config.reference_V) && config.reference_V > 0.4f && isfinite(config.zero_dac_V) && isfinite(config.output_per_dac_V) && config.output_per_dac_V != 0.0f &&

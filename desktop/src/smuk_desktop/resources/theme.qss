@@ -16,7 +16,7 @@ QLabel#modeBadge { color: #efb23b; border: 1px solid #705a2e; padding: 5px 10px;
 QLabel#statisticValue { font-family: "Menlo", "DejaVu Sans Mono"; font-size: 14px; }
 QLabel#muted { color: #8c9ba2; font-size: 11px; }
 QLabel[valid="true"] { color: #79c558; }
-QPushButton, QComboBox, QLineEdit { background: #263e49; border: 1px solid #405d6b; border-radius: 3px; padding: 8px 12px; }
+QPushButton, QComboBox, QLineEdit, QDoubleSpinBox { background: #263e49; border: 1px solid #405d6b; border-radius: 3px; padding: 8px 12px; }
 QPushButton:hover { background: #355563; }
 QPushButton:pressed { background: #456674; }
 QPushButton#connectButton { background: #d49a29; color: #101416; font-weight: bold; }
@@ -24,3 +24,12 @@ QPushButton:disabled, QComboBox:disabled, QLineEdit:disabled { background: #1b25
 QComboBox QAbstractItemView { background: #1a272e; selection-background-color: #405d6b; }
 QPlainTextEdit { background: #080d0e; color: #b9d0da; border: 1px solid #31474f; font-family: "Menlo", monospace; font-size: 11px; }
 QStatusBar { color: #efb23b; background: #101416; }
+
+QPushButton#outputButton[sourceState="2"], QPushButton#outputButton[sourceState="3"] {
+    background: #d39b32; color: #12171b; border: 1px solid #edb44b;
+}
+QPushButton#outputButton[sourceState="4"] {
+    background: #923e3e; color: #ffffff;
+}
+
+QPushButton#rangeBadge { font-family: "Menlo", monospace; font-size: 18px; padding: 12px; }

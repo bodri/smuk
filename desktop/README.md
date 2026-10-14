@@ -55,10 +55,10 @@ If firmware resets or a command times out, reconnect explicitly.
   averaged instantaneous power. Energy integration is deferred.
 - Guided manual calibration for voltage, current, and CALBUS: fixed-range preparation,
   rate-aware asynchronous captures, point quality, staged fits/residuals, explicit Flash
-  save confirmation, discard, and text report export. Source/PA controls remain deferred.
+  save confirmation, discard, and text report export. FV source controls are available when updated firmware reports source capabilities.
 
 Console commands currently supported: `PING`, `HELP`, `STATUS?`, `MEAS?`, `RAW?`,
-`ACQ?`, `CAL:SHOW?`, `CAL:POINTS?`, `ECHO ON|OFF`, and the range/autorange/impedance/
+`ACQ?`, `SOURCE?`, `SOURCE:V <volts>`, `OUTPUT ON|OFF`, `CAL:SHOW?`, `CAL:POINTS?`, `ECHO ON|OFF`, and the range/autorange/impedance/
 integration commands. Unknown commands and multiline command injection are rejected.
 See [firmware console documentation](../firmware/serial_console.md) for the wire format.
 The client targets the current firmware, including the `WATCHDOG` status line.
@@ -159,3 +159,37 @@ The bundled executable has been smoke-tested without opening hardware.
 Signing/notarization for distribution and Intel/Apple
 Silicon builds are separate deployment work. Build output and environments remain
 ignored. Qt's deployment guidance: [Qt for Python packaging](https://doc.qt.io/qtforpython-6/deployment/index.html).
+
+## FV source controls
+
+Click the **SET … V** button beneath the voltage measurement to open the voltage
+setpoint dialog. Bounds and slew rate come from `SOURCE?`; signed voltages become
+available only when supported by the configured hardware. Apply sends `SOURCE:V`
+and confirms the target with a fresh source query. The large readout remains the
+measured DUT voltage. Target and nominal applied command are shown during ramping.
+
+The **OUTPUT ON** button is enabled only with healthy settled readings, confirmed
+ADC rate, both autoranges OFF, current range 1.5 A, HIGHZ input, and no calibration
+session. Unmet prerequisites are displayed beneath the controls. The app does not
+silently alter instrument settings. Once starting/active, the button requests
+**OUTPUT OFF**; a tripped source can be reset explicitly with the same OFF request.
+Range and calibration controls are locked during source activity or pending source
+requests. An OFF request cancels queued source requests and takes user-queue priority;
+it still waits for any outstanding serial transaction to finish.
+
+Source state is confirmed through polling at approximately 1 Hz. An expired source
+reply or disconnect is shown as UNKNOWN and never permits ON. Reconnect queries the
+existing source state without restoring settings or enabling output. Older firmware
+without capability metadata remains usable for measurements with FV controls disabled.
+
+On the present PA board, ENABLE is tied to VCC and no relay exists: **OFF requests
+zero voltage, not PA shutdown or DUT isolation**. The display shows both limitations.
+Disconnecting/closing the app does not stop the physical output; request OFF before
+disconnecting when a zero command is wanted. Communication failure cannot guarantee
+zero output on this hardware.
+
+Firmware currently assumes the direct PA connection with gain 5 and zero offset.
+Use an external buffer to prevent unbuffered DAC loading. The proposed INA105
+bipolar converter requires a separate firmware mapping and startup protection before
+installation; it is not activated by this desktop update. Flash the matching updated
+firmware before using these controls. See [FV bring-up](../doc/fv-stm32-dac-bringup.md).

@@ -52,6 +52,7 @@ bool smu_fv_port_relay(bool connected) {
 
 bool smu_fv_port_init(smu_fv_config_t* config) {
     config->pa_enable_stub = SMU_FV_PA_ENABLE_STUB;
+    config->relay_stub = SMU_FV_RELAY_STUB;
 #if SMU_FV_HW_CONFIRMED
     (void)smu_fv_port_pa(false);
     (void)smu_fv_port_relay(false);
@@ -74,7 +75,8 @@ bool smu_fv_port_init(smu_fv_config_t* config) {
     LL_DAC_SetMode(DAC1, LL_DAC_CHANNEL_2, LL_DAC_MODE_NORMAL_OPERATION);
     LL_DAC_DisableTrigger(DAC1, LL_DAC_CHANNEL_2);
     LL_DAC_ConfigOutput(DAC1, LL_DAC_CHANNEL_2, LL_DAC_OUTPUT_MODE_NORMAL, SMU_FV_DAC_BUFFERED ? LL_DAC_OUTPUT_BUFFER_ENABLE : LL_DAC_OUTPUT_BUFFER_DISABLE, LL_DAC_OUTPUT_CONNECT_GPIO);
-    *config = (smu_fv_config_t){SMU_FV_REFERENCE_V, SMU_FV_ZERO_DAC_V, SMU_FV_GAIN, SMU_FV_MIN_V, SMU_FV_MAX_V, SMU_FV_SLEW_V_S, SMU_FV_MAX_CURRENT_A, SMU_FV_DAC_BUFFERED, SMU_FV_PA_ENABLE_STUB};
+    *config = (smu_fv_config_t){SMU_FV_REFERENCE_V, SMU_FV_ZERO_DAC_V,    SMU_FV_GAIN,         SMU_FV_MIN_V,          SMU_FV_MAX_V,
+                                SMU_FV_SLEW_V_S,    SMU_FV_MAX_CURRENT_A, SMU_FV_DAC_BUFFERED, SMU_FV_PA_ENABLE_STUB, SMU_FV_RELAY_STUB};
     ready = true;
     /* PA is disabled throughout DAC wakeup and loading of the zero command. */
     LL_DAC_Enable(DAC1, LL_DAC_CHANNEL_2);

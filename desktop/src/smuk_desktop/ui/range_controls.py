@@ -27,7 +27,7 @@ class RangeControls(QFrame):
         self.integration = self._selector(layout, "INTEGRATION", INTEGRATIONS)
         self.integration.setCurrentText("2MS")
         self.integration.activated.connect(lambda _: self.command.emit(f"INTEGRATION {self.integration.currentText()}"))
-        note = QLabel("Measurement only\nPA unavailable")
+        note = QLabel("Output OFF before\nchanging ranges")
         note.setObjectName("muted")
         layout.addSpacing(20)
         layout.addWidget(note)

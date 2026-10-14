@@ -6,6 +6,7 @@ from .range_controls import RangeControls
 from .statistics_panel import StatisticsPanel
 from .console_panel import ConsolePanel
 from .calibration_dialog import CalibrationDialog
+from .source_dialog import SourceDialog
 
 
 class MainWindow(QMainWindow):
@@ -59,6 +60,8 @@ class MainWindow(QMainWindow):
         self.ranges.command.connect(controller.send)
         body.addWidget(self.ranges)
         self.display = MeasurementDisplay()
+        self.display.voltage_range.clicked.connect(self._source_voltage)
+        self.display.output.clicked.connect(self._source_output)
         body.addWidget(self.display, 1)
         self.statistics = StatisticsPanel()
         self.statistics.reset_requested.connect(controller.reset_statistics)
@@ -66,8 +69,9 @@ class MainWindow(QMainWindow):
         layout.addLayout(body, 1)
         footer = QHBoxLayout()
         footer.setContentsMargins(0, 12, 0, 8)
-        self.diagnostics = QLabel("115200 / 8N1 • PA unavailable")
+        self.diagnostics = QLabel("115200 / 8N1 • FV status unknown")
         self.diagnostics.setObjectName("muted")
+        self.diagnostics.setWordWrap(True)
         footer.addWidget(self.diagnostics)
         footer.addStretch()
         self.calibrate = QPushButton("Manual calibration…")
@@ -123,6 +127,15 @@ class MainWindow(QMainWindow):
             dialog = CalibrationDialog(self.controller, self)
             dialog.exec()
 
+    def _source_voltage(self):
+        if self.controller.state.source_known and not self.controller.calibration_active:
+            SourceDialog(self.controller, self).exec()
+
+    def _source_output(self):
+        state = self.controller.state
+        on = state.source_known and state.source.state == 1 and not state.source_pending
+        self.controller.send("OUTPUT ON" if on else "OUTPUT OFF")
+
     def _update(self):
         state = self.controller.state
         busy = state.connected or self.controller.handshaking
@@ -134,15 +147,24 @@ class MainWindow(QMainWindow):
         self.health.style().unpolish(self.health)
         self.health.style().polish(self.health)
         self.ranges.update_state(state)
-        if self.controller.calibration_active:
+        if self.controller.calibration_active or state.source_busy or state.source_pending or (state.source and not state.source_known):
             self.ranges.setEnabled(False)
-        self.calibrate.setEnabled(state.healthy and not self.controller.calibration_active and not self.controller.user_queue)
+        self.calibrate.setEnabled(state.healthy and not self.controller.calibration_active and not self.controller.user_queue and not state.source_busy and not state.source_pending and (state.source is None or (state.source_known and state.source.state in (0, 1))))
         self.display.update_state(state)
+        if self.controller.calibration_active:
+            self.display.voltage_range.setEnabled(False)
+            if state.source_known and state.source.state == 1:
+                self.display.output.setEnabled(False)
         self.statistics.update_statistics(self.controller.statistics)
         self.console.set_connected(state.connected)
         a = state.acquisition
         if a:
-            self.diagnostics.setText(f"CRC {a.get('crc', '—')}  SPI {a.get('spi', '—')}  Gaps {a.get('gaps', '—')}  Busy {a.get('busy', '—')}  •  IWDG {'ON' if state.watchdog.get('active') == '1' else '—'}  •  PA unavailable")
+            self.diagnostics.setText(f"CRC {a.get('crc', '—')}  SPI {a.get('spi', '—')}  Gaps {a.get('gaps', '—')}  Busy {a.get('busy', '—')}  •  IWDG {'ON' if state.watchdog.get('active') == '1' else '—'}  •  FV status unknown")
+            if state.source_known:
+                capability = "PA always enabled" if state.source.pa_always_enabled else "PA enable controlled"
+                if not state.source.relay_available:
+                    capability += " • no isolation relay"
+                self.diagnostics.setText(self.diagnostics.text().replace("FV status unknown", capability))
             if "frame_hz" in a:
                 self.diagnostics.setText(self.diagnostics.text() + f" • ADC {a['frame_hz']}/{a.get('rate_hz', '—')} SPS")
                 if a.get("rate_known") == "1" and a.get("rate_ok") == "0":

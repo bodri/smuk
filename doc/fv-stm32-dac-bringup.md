@@ -8,7 +8,7 @@ The firmware now contains a HAL-agnostic FV controller and an STM32H503 DAC1/cha
 
 ## Information needed to activate it
 
-- Confirmed mapping: unity gain and zero offset. General transfer function: `V_DUT = gain × (V_DAC − zero_dac_V)`.
+- Confirmed mapping: PA gain 5 and zero offset; direct buffered DAC connection. General transfer function: `V_DUT = gain × (V_DAC − zero_dac_V)`.
 - The measured DAC reference/analog supply voltage.
 - ENABLE is currently tied to VCC; no PA GPIO is required while `SMU_FV_PA_ENABLE_STUB=1`. No relay GPIO is required while its stub is selected.
 - Confirmed independent positive and negative hardware current limits. Firmware does not program the LT1970A current-limit inputs in this prototype.
@@ -50,7 +50,7 @@ Review the bench defaults in `smu_fv_board.h` and override the remaining definit
 
 Use floating-point constants where appropriate. GPIOs must be configured by CubeMX before `smu_init`. ENABLE must have a physical safe-default pull resistor. Recheck the actual wiring and GPIO electrical requirements before assigning pins. The firmware cannot verify those facts.
 
-The default unbuffered DAC permits nominal 0 V through the reference voltage. With unity gain and zero offset, negative voltage requests are unsupported. Buffered mode, if selected, restricts the DAC to 0.2 V through `reference_V − 0.2 V` and cannot support this zero-offset startup. Requests outside either the configured source range or that DAC interval are rejected, not clipped. Check the buffered-output load and voltage specifications for the actual supply and load.
+The default unbuffered DAC permits nominal 0 V through the reference voltage. With direct PA gain 5 and zero offset, negative voltage requests are unsupported. Buffered mode, if selected, restricts the DAC to 0.2 V through `reference_V − 0.2 V` and cannot support this zero-offset startup. Requests outside either the configured source range or that DAC interval are rejected, not clipped. Check the buffered-output load and voltage specifications for the actual supply and load.
 
 ## Serial commands
 
@@ -103,10 +103,12 @@ Unhealthy acquisition, instrument faults, range changes, overload, excessive mea
 
 References: [STM32H503 datasheet](https://www.st.com/resource/en/datasheet/stm32h503rb.pdf) for PA5/DAC1_OUT2 and DAC limits; [ST v1.7.0 DAC LL header](https://github.com/STMicroelectronics/stm32h5xx-hal-driver/blob/v1.7.0/Inc/stm32h5xx_ll_dac.h).
 
-Current hardware revision: PA gain = 1, zero command = 0 V, no output relay. Gain, zero and relay-stub defaults are already configured. Reference, conservative bounds and hardware-limit configuration remain required; the user has confirmed independent hardware current limiting. GPIOs are not required for either stub. Relay sequencing delays remain in place for compatibility, but no physical contact opens or closes in stub mode.
+Current hardware revision: PA gain = 5, zero command = 0 V, no output relay. Gain, zero and relay-stub defaults are already configured. Reference, conservative bounds and hardware-limit configuration remain required; the user has confirmed independent hardware current limiting. GPIOs are not required for either stub. Relay sequencing delays remain in place for compatibility, but no physical contact opens or closes in stub mode.
 
 With the always-enabled PA board, firmware boots the voltage input in HIGHZ and rejects 10 MΩ loading, even when the source controller is logically OFF. Physical PA disable, safe reset behavior and isolation must be implemented in hardware before treating this as a finished SMU. Bench bring-up should use a passive load; the zero-command/relay-stub sequence is not validated for an externally energized DUT.
 
 Bench defaults are now supplied: nominal DAC reference 3.3 V, output requests 0–1 V, slew 0.1 V/s, software current trip at 10 mA. Independent hardware limits are confirmed. `SMU_FV_HW_CONFIRMED` now defaults to 1 for PA5 bench bring-up. Set it to 0 to disable the DAC backend. Neither ENABLE nor relay GPIOs are required with both stubs selected. Verify the PA5/reference/load conditions with the PA disconnected first. These defaults do not establish calibrated source accuracy.
 
 DAC ownership: `Core/Src/dac.c` returns from `MX_DAC1_Init` inside its USER CODE block. The FV platform backend initializes DAC1 after UART transport starts and selects HCLK-compatible high-frequency mode. Keep this USER CODE block when regenerating CubeMX; do not start the DAC through a second HAL handle.
+
+Desktop FV control uses `SOURCE?` metadata: `minimum_V`, `maximum_V`, `slew_V_s`, `pa_always_enabled`, and `relay_available`. The 0–1 V limits refer to DUT commands; direct PA gain 5 means a 1 V DUT request produces nominal 0.2 V at the DAC. If the INA105 converter is later installed, use overall gain 10 and neutral DAC voltage 1.5 V, with reviewed signed bounds and hardware startup protection. Do not change to that mapping before installing the converter.

@@ -64,6 +64,9 @@ def complete_startup(app, controller, connection):
     connection.line_received.emit(MEAS)
     connection.line_received.emit(QUALITY)
     app.processEvents()
+    assert connection.written[-1] == "SOURCE?"
+    connection.line_received.emit("ERR unknown command; HELP")
+    app.processEvents()
 
 
 def test_serialization_and_user_priority(app):

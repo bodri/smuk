@@ -4,7 +4,7 @@ import re
 VOLTAGE_RANGES = ("15V", "6V")
 CURRENT_RANGES = ("1.5A", "100MA", "10MA", "1MA", "100UA")
 INTEGRATIONS = ("500US", "1MS", "2MS", "5MS", "8MS", "10MS", "20MS", "50MS", "100MS")
-QUERIES = {"PING", "STATUS?", "MEAS?", "RAW?", "ACQ?", "HELP", "CAL:SHOW?", "CAL:POINTS?"}
+QUERIES = {"PING", "STATUS?", "MEAS?", "RAW?", "ACQ?", "HELP", "CAL:SHOW?", "CAL:POINTS?", "SOURCE?"}
 VALUES = {
     "RANGE:V": VOLTAGE_RANGES,
     "RANGE:I": CURRENT_RANGES,
@@ -13,6 +13,7 @@ VALUES = {
     "AUTORANGE:V": ("ON", "OFF"),
     "IMPEDANCE": ("10M", "HIGHZ"),
     "INTEGRATION": INTEGRATIONS,
+    "OUTPUT": ("ON", "OFF"),
     "ECHO": ("ON", "OFF"),
 }
 
@@ -24,6 +25,9 @@ def validate_command(text: str, *, calibration: bool = False) -> str:
     if command in QUERIES:
         return command
     parts = command.split(" ")
+    if len(parts) == 2 and parts[0] == "SOURCE:V":
+        if re.fullmatch(r"[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:E[+-]?\d+)?", parts[1]) and math.isfinite(float(parts[1])):
+            return command
     if calibration:
         if command in {"CAL:FIT", "CAL:SAVE", "CAL:RESET", "CAL:ABORT"}:
             return command

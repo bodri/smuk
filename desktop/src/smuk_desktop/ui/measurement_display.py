@@ -2,7 +2,7 @@ import math
 import time
 from PySide6.QtCore import Qt, QRectF
 from PySide6.QtGui import QPainter, QPalette
-from PySide6.QtWidgets import QFrame, QLabel, QVBoxLayout, QHBoxLayout
+from PySide6.QtWidgets import QFrame, QLabel, QVBoxLayout, QHBoxLayout, QPushButton
 
 
 def format_value(value: float | None, unit: str, decimals: int = 5) -> str:
@@ -61,10 +61,18 @@ class MeasurementDisplay(QFrame):
         layout.addLayout(power_row)
         layout.addStretch()
         self.voltage = self._reading(layout, "VOLTAGE", "— V")
-        self.voltage_range = QLabel("Range —")
+        self.voltage_range = QPushButton("SET — V")
         self.voltage_range.setObjectName("rangeBadge")
-        self.voltage_range.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        layout.addWidget(self.voltage_range)
+        source_row = QHBoxLayout()
+        source_row.addWidget(self.voltage_range, 1)
+        self.output = QPushButton("OUTPUT UNKNOWN")
+        self.output.setObjectName("outputButton")
+        source_row.addWidget(self.output)
+        layout.addLayout(source_row)
+        self.source_detail = QLabel("FV source status unavailable")
+        self.source_detail.setWordWrap(True)
+        self.source_detail.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(self.source_detail)
         layout.addSpacing(30)
         self.current = self._reading(layout, "CURRENT", "— A")
         self.current_range = QLabel("Range —")
@@ -99,8 +107,35 @@ class MeasurementDisplay(QFrame):
             label.style().unpolish(label)
             label.style().polish(label)
         if m:
-            self.voltage_range.setText(f"RANGE  {m.voltage_range}")
             self.current_range.setText(f"RANGE  {m.current_range}")
+        source = state.source if state.source_known else None
+        self.voltage_range.setText(f"SET {source.requested:.6f} V" if source else "SET — V")
+        self.voltage_range.setEnabled(bool(source and source.state in (1, 2, 3) and not state.source_pending))
+        self.output.setProperty("sourceState", str(source.state) if source else "unknown")
+        if source:
+            labels = {0: "OUTPUT UNAVAILABLE", 1: "OUTPUT ON", 2: "STARTING… / OUTPUT OFF", 3: "OUTPUT OFF", 4: "OUTPUT TRIPPED / RESET"}
+            self.output.setText("OUTPUT OFF" if state.source_pending else labels[source.state])
+            self.output.setEnabled(source.state in (2, 3, 4) or state.source_pending or (source.state == 1 and not state.source_prerequisites))
+            detail = "Zero command" if source.state == 1 else "FV"
+            if source.state in (2, 3) and abs(source.requested - source.applied) > 0.00001:
+                detail += f" • target {source.requested:.6f} V • ramping (command {source.applied:.6f} V)"
+            if source.pa_always_enabled:
+                detail += " • PA always enabled"
+            if not source.relay_available:
+                detail += " • no isolation relay"
+            if source.state == 1 and state.source_prerequisites:
+                detail += "\n" + "; ".join(state.source_prerequisites)
+            self.source_detail.setText(detail)
+            self.mode.setText("FV" if source.state in (2, 3) else "MEASURE")
+        else:
+            self.output.setText("OUTPUT UNKNOWN")
+            # A stale known source may still be commanded OFF; never ON.
+            self.output.setEnabled(bool(state.connected and state.source and state.source.state != 0))
+            self.source_detail.setText("FV source status unavailable; output state unknown")
+            self.mode.setText("MEASURE")
+        self.output.setToolTip("Request zero output; PA remains enabled without hardware ENABLE control" if source and source.pa_always_enabled else "Control confirmed FV output")
+        self.output.style().unpolish(self.output)
+        self.output.style().polish(self.output)
         if not state.connected:
             quality = "DISCONNECTED • readings retained" if m else "Connect an instrument to begin"
         elif state.status.get("faults", "0") != "0":
