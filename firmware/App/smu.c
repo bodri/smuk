@@ -6,6 +6,7 @@
 #include "smu_cal_debug.h"
 #include "smu_calibration.h"
 #include "smu_console.h"
+#include "smu_fv.h"
 #include "smu_log.h"
 #include "smu_port.h"
 #include "smu_watchdog.h"
@@ -31,6 +32,7 @@ ads131m03_dma_frame_t adc_frame;
 smu_measurement_outputs_t smu_outputs;
 
 static void fault(uint32_t bits) {
+    smu_fv_trip();
     if ((g.faults & bits) != bits)
         (void)smu_log_printf("SMU fault bits=0x%08lX\r\n", (unsigned long)bits);
     smu_cal_debug_acquisition_gap();
@@ -45,6 +47,7 @@ static void fault(uint32_t bits) {
 }
 
 bool smu_init(void) {
+    smu_fv_init();
     memset(&g, 0, sizeof(g));
     g.state = SMU_STATE_POWER_UP;
     g.current_autorange = true;
@@ -77,7 +80,7 @@ bool smu_init(void) {
      * after DRDY is enabled are dropped while they settle. */
     (void)smu_range_request(&ranges, SMU_RANGE_1P5A, SMU_RANGE_REASON_USER);
     (void)smu_range_request_voltage(&ranges, SMU_VRANGE_15V);
-    (void)smu_range_request_input_10m(&ranges, true);
+    (void)smu_range_request_input_10m(&ranges, !smu_fv_status()->pa_always_enabled);
     smu_range_tick_ms(&ranges, 0u);
     if (ranges.tx_state == SMU_RANGE_TX_FAULT) {
         fault(SMU_FAULT_RANGE);
@@ -238,7 +241,9 @@ void smu_process(void) {
     const uint32_t elapsed_ms = now - last_ms;
     last_ms = now;
 
-    if (g.state != SMU_STATE_FAULT)
+    if (smu_fv_busy() && smu_cal_debug_active())
+        smu_fv_trip();
+    if (g.state != SMU_STATE_FAULT && !smu_fv_busy())
         smu_cal_debug_process(elapsed_ms);
     update_calibration_state();
 
@@ -265,6 +270,7 @@ void smu_process(void) {
     g.adc_rate_known = acquisition.rate_known;
     g.adc_rate_ok = acquisition.rate_ok;
     g.range_switch_count = ranges.switch_count;
+    smu_fv_process();
 }
 
 void smu_get_measurement(smu_measurement_outputs_t* out) {
@@ -277,7 +283,9 @@ const smu_context_t* smu_get_context(void) {
 }
 
 smu_status_t smu_set_input_10m(bool enabled) {
-    if (g.state != SMU_STATE_NORMAL || smu_range_busy(&ranges))
+    if (enabled && smu_fv_status()->pa_always_enabled)
+        return SMU_ERR_STATE;
+    if (smu_fv_busy() || g.state != SMU_STATE_NORMAL || smu_range_busy(&ranges))
         return SMU_ERR_STATE;
     if (!smu_range_request_input_10m(&ranges, enabled))
         return SMU_ERR_STATE;
@@ -288,7 +296,7 @@ smu_status_t smu_set_input_10m(bool enabled) {
 }
 
 smu_status_t smu_set_current_range(smu_current_range_t range) {
-    if (g.state != SMU_STATE_NORMAL)
+    if (smu_fv_busy() || g.state != SMU_STATE_NORMAL)
         return SMU_ERR_STATE;
     if (!smu_range_request(&ranges, range, SMU_RANGE_REASON_USER))
         return (ranges.error == SMU_RANGE_ERR_BAD_REQUEST) ? SMU_ERR_ARG : SMU_ERR_STATE;
@@ -297,19 +305,23 @@ smu_status_t smu_set_current_range(smu_current_range_t range) {
 }
 
 void smu_set_current_autorange(bool enabled) {
+    if (smu_fv_busy())
+        return;
     g.current_autorange = enabled;
     if (g.state == SMU_STATE_NORMAL)
         smu_range_set_current_autorange(&ranges, enabled);
 }
 
 void smu_set_voltage_autorange(bool enabled) {
+    if (smu_fv_busy())
+        return;
     g.voltage_autorange = enabled;
     if (g.state == SMU_STATE_NORMAL)
         smu_range_set_voltage_autorange(&ranges, enabled);
 }
 
 smu_status_t smu_set_voltage_range(smu_voltage_range_t range) {
-    if (g.state != SMU_STATE_NORMAL)
+    if (smu_fv_busy() || g.state != SMU_STATE_NORMAL)
         return SMU_ERR_STATE;
     if (!smu_range_request_voltage(&ranges, range))
         return (ranges.error == SMU_RANGE_ERR_BAD_REQUEST) ? SMU_ERR_ARG : SMU_ERR_STATE;
@@ -321,7 +333,7 @@ smu_status_t smu_set_integration_us(uint32_t microseconds) {
     if (microseconds != 500u && microseconds != 1000u && microseconds != 2000u && microseconds != 5000u && microseconds != 8000u && microseconds != 10000u && microseconds != 20000u &&
         microseconds != 50000u && microseconds != 100000u)
         return SMU_ERR_ARG;
-    if (g.state != SMU_STATE_NORMAL || smu_range_busy(&ranges))
+    if (smu_fv_busy() || g.state != SMU_STATE_NORMAL || smu_range_busy(&ranges))
         return SMU_ERR_STATE;
     const uint16_t samples = (uint16_t)(microseconds / (1000000u / SMU_PRECISION_RATE_HZ));
     if (!smu_measurement_set_precision_samples(samples))

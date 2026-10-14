@@ -10,8 +10,9 @@
  * Top level of the SMU. main.c only calls smu_init() once after the CubeMX
  * peripheral init and smu_process() from the main loop.
  *
- * Current scope: measurement only (no sourcing). Boots in 1.5 A / 15 V with
- * current and voltage autorange enabled.
+ * Measurement boots in 1.5 A / 15 V with
+ * current and voltage autorange enabled. Temporary FV sourcing is a separate,
+ * board-gated controller (smu_fv.h); unavailable until wiring is confirmed.
  */
 
 /* Loads calibration, brings up the ADS131M03, selects the boot ranges and

@@ -18,6 +18,7 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
+#include "dac.h"
 #include "gpdma.h"
 #include "gpio.h"
 #include "icache.h"
@@ -100,12 +101,10 @@ int main(void) {
     MX_GPDMA1_Init();
     MX_SPI1_Init();
     MX_ICACHE_Init();
+    MX_DAC1_Init();
     /* USER CODE BEGIN 2 */
 
     /* USER CODE END 2 */
-
-    /* Initialize led */
-    BSP_LED_Init(LED_GREEN);
 
     /* Initialize USER push-button, will be used to trigger an interrupt each time it's pressed.*/
     BSP_PB_Init(BUTTON_USER, BUTTON_MODE_EXTI);

@@ -8,6 +8,7 @@ for rate in 4000 32000; do
     -I"$firmware_dir/Drivers/SMU" -I"$firmware_dir/App" -I"$firmware_dir/Storage" \
     "$firmware_dir/tests/test_console.c" "$firmware_dir/App/smu_console.c" \
     "$firmware_dir/App/smu_watchdog.c" \
+    "$firmware_dir/App/smu_fv.c" "$firmware_dir/tests/fv_unavailable_port.c" \
     "$firmware_dir/Drivers/SMU/smu_log.c" \
     "$firmware_dir/App/smu_cal_capture.c" \
     "$firmware_dir/App/smu_measurement.c" "$firmware_dir/App/smu_calibration_fit.c" -lm -o "$test_dir/test_console"

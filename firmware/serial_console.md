@@ -452,3 +452,7 @@ a deliberate foreground infinite loop or debugger-injected HardFault and verify
 reset after approximately 2 s and `WATCHDOG reset=1` afterward. Use a temporary
 bench-only fault injection, never a normal serial command. Verify PA enable and
 range/impedance reset behavior electrically before adding a working output stage.
+
+## Temporary FV source development
+
+`SOURCE?`, `SOURCE:V <volts>`, and `OUTPUT ON|OFF` are available for the temporary STM32 DAC backend. Physical output is unavailable by default until board wiring, scaling, and independent hardware current limits are confirmed. See [FV DAC bring-up](../doc/fv-stm32-dac-bringup.md) for configuration, interlocks, and tests.

@@ -12,6 +12,7 @@ trap 'rm -rf "$test_dir"' EXIT HUP INT TERM
     "$firmware_dir/Drivers/SMU/range_hw.c" "$firmware_dir/Drivers/SMU/safety_hw.c" \
     "$firmware_dir/Storage/calibration_record.c" "$firmware_dir/App/smu_calibration_fit.c" \
     "$firmware_dir/App/smu_watchdog.c" \
+    "$firmware_dir/App/smu_fv.c" "$firmware_dir/tests/fv_unavailable_port.c" \
     "$firmware_dir/Drivers/SMU/smu_log.c" \
     -lm -o "$test_dir/test_measurement_health"
 "$test_dir/test_measurement_health"

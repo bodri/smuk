@@ -238,6 +238,12 @@ int main(void) {
     lost = true;
     send("PING\nPING\n");
     assert(strstr(output, "RX loss") && strstr(output, "PONG"));
+    send("SOURCE?\n");
+    assert(strstr(output, "SOURCE mode=FV state=0"));
+    send("SOURCE:V NAN\n");
+    assert(strstr(output, "ERR source request"));
+    send("OUTPUT ON\n");
+    assert(strstr(output, "ERR output request status=3"));
     send("INTEGRATION 500US\n");
     assert(strstr(output, "OK integration"));
     send("MEAS?\n");
@@ -318,4 +324,12 @@ bool smu_watchdog_port_start(void) {
 
 bool smu_watchdog_port_refresh(void) {
     return true;
+}
+
+/* The temporary source backend is deliberately unavailable in console fixtures. */
+void safety_hw_disable_pa(void) {
+}
+
+bool safety_hw_request_pa_enable(void) {
+    return false;
 }

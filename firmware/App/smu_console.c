@@ -2,6 +2,7 @@
 #include "smu.h"
 #include "smu_calibration.h"
 #include "smu_console_port.h"
+#include "smu_fv.h"
 #include "smu_log.h"
 #include "smu_port.h"
 #include "smu_watchdog.h"
@@ -198,12 +199,36 @@ static void command(char* text) {
     }
     if (!arg)
         arg = "";
-    if (!strcmp(text, "HELP") && !*arg) {
+    if (smu_fv_busy() && (!strncmp(text, "CAL:", 4) || !strncmp(text, "RANGE:", 6) || !strncmp(text, "AUTORANGE", 9) || !strcmp(text, "IMPEDANCE"))) {
+        reply("ERR output active; OUTPUT OFF first\r\n");
+        return;
+    }
+    if (!strcmp(text, "SOURCE?") && !*arg) {
+        const smu_fv_status_t* source = smu_fv_status();
+        char requested[32], applied[32];
+        reply("SOURCE mode=FV state=%u requested_V=%s applied_V=%s code=%u backend=STM32_DAC pa_always_enabled=%u\r\n", source->state, number(source->requested_V, requested),
+              number(source->applied_V, applied), source->code, source->pa_always_enabled);
+    } else if (!strcmp(text, "SOURCE:V")) {
+        float voltage;
+        const smu_status_t result = capturing || target != TARGET_NONE ? SMU_ERR_STATE : parse_reference(arg, &voltage) ? smu_fv_set_voltage(voltage) : SMU_ERR_ARG;
+        if (result == SMU_OK)
+            reply("OK voltage requested\r\n");
+        else
+            reply("ERR source request status=%u\r\n", result);
+    } else if (!strcmp(text, "OUTPUT") && (!strcmp(arg, "ON") || !strcmp(arg, "OFF"))) {
+        const bool on = !strcmp(arg, "ON");
+        const smu_status_t result = on && (capturing || target != TARGET_NONE) ? SMU_ERR_STATE : smu_fv_output(on);
+        if (result == SMU_OK)
+            reply("OK output request; SOURCE? confirms state\r\n");
+        else
+            reply("ERR output request status=%u\r\n", result);
+    } else if (!strcmp(text, "HELP") && !*arg) {
         reply("STATUS? ACQ? MEAS? RAW? CAL:SHOW? ECHO ON|OFF; INTEGRATION 500US|1MS|2MS|5MS|8MS|10MS|20MS|50MS|100MS; IMPEDANCE 10M|HIGHZ\r\nRANGE:I 1.5A|100MA|10MA|1MA|100UA; RANGE:V 15V|6V; "
               "AUTORANGE[:I|:V] "
               "ON|OFF\r\nCAL:BEGIN V|I|BUS; CAL:CAPTURE "
               "<reference in V/A>; CAL:FIT; "
               "CAL:POINTS?\r\nCAL:SAVE; CAL:RESET; CAL:ABORT; PING\r\n");
+        reply("SOURCE? SOURCE:V <volts>; OUTPUT ON|OFF (FV prototype; confirmed hardware required)\r\n");
     } else if (!strcmp(text, "PING") && !*arg)
         reply("PONG\r\n");
     else if (!strcmp(text, "ECHO") && (!strcmp(arg, "ON") || !strcmp(arg, "OFF"))) {
@@ -393,6 +418,7 @@ smu_cal_capture_config_t* smu_console_calibration_config(void) {
 }
 
 void smu_console_acquisition_gap(void) {
+    smu_fv_trip();
     if (capturing || ready) {
         capturing = ready = false;
         reply("ERR acquisition gap; capture discarded\r\n");
