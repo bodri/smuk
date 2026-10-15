@@ -167,3 +167,56 @@ def test_full_bipolar_bounds_from_firmware(app):
     assert conn.written[-1] == "SOURCE:V -15.000000"
     dialog.close()
     c.disconnect()
+
+FEEDBACK = " regulation=0 limited=0 zero_valid=0 correction_V=0"
+
+
+def test_feedback_metadata_and_zeroing(app):
+    c, conn = source_session(app)
+    c.send("SOURCE?")
+    conn.line_received.emit(SOURCE.replace("state=1", "state=5") + FEEDBACK)
+    app.processEvents()
+    assert c.state.source_busy
+    window = MainWindow(c)
+    assert "CANCEL" in window.display.output.text()
+    assert window.display.output.isEnabled()
+    c.send("OUTPUT OFF")
+    assert conn.written[-1] == "OUTPUT OFF"
+    window.close()
+    c.disconnect()
+
+
+def test_feedback_commands_require_supported_off_state(app):
+    c, conn = source_session(app)
+    before = len(conn.written)
+    c.send("SOURCE:ZERO")
+    assert len(conn.written) == before
+    c.send("SOURCE?")
+    conn.line_received.emit(SOURCE + FEEDBACK)
+    app.processEvents()
+    c.send("SOURCE:REGULATION ON")
+    assert conn.written[-1] == "SOURCE:REGULATION ON"
+    assert c.state.source_pending
+    assert c.state.source.regulation is False  # Wait for confirmed device state.
+    c.disconnect()
+
+
+def test_feedback_parser_rejects_invalid_metadata():
+    for suffix in (FEEDBACK.replace("correction_V=0", "correction_V=nan"),
+                   FEEDBACK.replace("zero_valid=0", "zero_valid=2")):
+        with pytest.raises(ValueError):
+            Source.from_response(parse_line(SOURCE + suffix))
+    for command in ("SOURCE:ZERO", "SOURCE:REGULATION ON", "SOURCE:REGULATION OFF"):
+        assert validate_command(command) == command
+
+
+def test_feedback_controls_use_confirmed_metadata(app):
+    c, conn = source_session(app)
+    c.send("SOURCE?")
+    conn.line_received.emit(SOURCE + FEEDBACK)
+    app.processEvents()
+    dialog = SourceDialog(c)
+    assert dialog.zero.isEnabled() and dialog.regulation.isEnabled()
+    assert "Enable" in dialog.regulation.text()
+    dialog.close()
+    c.disconnect()

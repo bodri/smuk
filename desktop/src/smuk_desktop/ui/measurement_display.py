@@ -113,12 +113,16 @@ class MeasurementDisplay(QFrame):
         self.voltage_range.setEnabled(bool(source and source.state in (1, 2, 3) and not state.source_pending))
         self.output.setProperty("sourceState", str(source.state) if source else "unknown")
         if source:
-            labels = {0: "OUTPUT UNAVAILABLE", 1: "OUTPUT ON", 2: "STARTING… / OUTPUT OFF", 3: "OUTPUT OFF", 4: "OUTPUT TRIPPED / RESET"}
+            labels = {0: "OUTPUT UNAVAILABLE", 1: "OUTPUT ON", 2: "STARTING… / OUTPUT OFF", 3: "OUTPUT OFF", 4: "OUTPUT TRIPPED / RESET", 5: "ZERO LEARNING / CANCEL"}
             self.output.setText("OUTPUT OFF" if state.source_pending else labels[source.state])
-            self.output.setEnabled(source.state in (2, 3, 4) or state.source_pending or (source.state == 1 and not state.source_prerequisites))
+            self.output.setEnabled(source.state in (2, 3, 4, 5) or state.source_pending or (source.state == 1 and not state.source_prerequisites))
             detail = "Zero command" if source.state == 1 else "FV"
             if source.state in (2, 3) and abs(source.requested - source.applied) > 0.00001:
                 detail += f" • target {source.requested:.6f} V • ramping (command {source.applied:.6f} V)"
+            if source.regulation is not None:
+                detail += f" • correction {'ON' if source.regulation else 'OFF'} ({source.correction:+.6f} V)"
+                detail += " • LIMITED" if source.limited else ""
+                detail += " • zero learned" if source.zero_valid else " • zero not learned"
             if source.pa_always_enabled:
                 detail += " • PA always enabled"
             if not source.relay_available:

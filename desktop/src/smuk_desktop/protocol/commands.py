@@ -4,7 +4,7 @@ import re
 VOLTAGE_RANGES = ("15V", "6V")
 CURRENT_RANGES = ("1.5A", "100MA", "10MA", "1MA", "100UA")
 INTEGRATIONS = ("500US", "1MS", "2MS", "5MS", "8MS", "10MS", "20MS", "50MS", "100MS")
-QUERIES = {"PING", "STATUS?", "MEAS?", "RAW?", "ACQ?", "HELP", "CAL:SHOW?", "CAL:POINTS?", "SOURCE?"}
+QUERIES = {"PING", "STATUS?", "MEAS?", "RAW?", "ACQ?", "HELP", "CAL:SHOW?", "CAL:POINTS?", "SOURCE?", "SOURCE:ZERO"}
 VALUES = {
     "RANGE:V": VOLTAGE_RANGES,
     "RANGE:I": CURRENT_RANGES,
@@ -13,6 +13,7 @@ VALUES = {
     "AUTORANGE:V": ("ON", "OFF"),
     "IMPEDANCE": ("10M", "HIGHZ"),
     "INTEGRATION": INTEGRATIONS,
+    "SOURCE:REGULATION": ("ON", "OFF"),
     "OUTPUT": ("ON", "OFF"),
     "ECHO": ("ON", "OFF"),
 }

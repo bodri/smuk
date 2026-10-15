@@ -40,7 +40,7 @@ static bool echo;
 static void reply(const char* format, ...) __attribute__((format(printf, 1, 2)));
 
 static void reply(const char* format, ...) {
-    char text[384];
+    char text[512];
     va_list args;
     va_start(args, format);
     int n = vsnprintf(text, sizeof(text), format, args);
@@ -205,10 +205,18 @@ static void command(char* text) {
     }
     if (!strcmp(text, "SOURCE?") && !*arg) {
         const smu_fv_status_t* source = smu_fv_status();
-        char requested[32], applied[32], minimum[32], maximum[32], slew[32];
-        reply("SOURCE mode=FV state=%u requested_V=%s applied_V=%s code=%u backend=STM32_DAC pa_always_enabled=%u relay_available=%u minimum_V=%s maximum_V=%s slew_V_s=%s\r\n", source->state,
-              number(source->requested_V, requested), number(source->applied_V, applied), source->code, source->pa_always_enabled, source->relay_available, number(source->minimum_V, minimum),
-              number(source->maximum_V, maximum), number(source->slew_V_per_s, slew));
+        char requested[32], applied[32], minimum[32], maximum[32], slew[32], correction[32];
+        reply("SOURCE mode=FV state=%u requested_V=%s applied_V=%s code=%u backend=STM32_DAC pa_always_enabled=%u relay_available=%u minimum_V=%s maximum_V=%s slew_V_s=%s regulation=%u limited=%u "
+              "zero_valid=%u correction_V=%s\r\n",
+              source->state, number(source->requested_V, requested), number(source->applied_V, applied), source->code, source->pa_always_enabled, source->relay_available,
+              number(source->minimum_V, minimum), number(source->maximum_V, maximum), number(source->slew_V_per_s, slew), source->regulation, source->limited, source->zero_valid,
+              number(source->correction_V, correction));
+    } else if ((!strcmp(text, "SOURCE:ZERO") && !*arg) || (!strcmp(text, "SOURCE:REGULATION") && (!strcmp(arg, "ON") || !strcmp(arg, "OFF")))) {
+        const smu_status_t result = capturing || target != TARGET_NONE ? SMU_ERR_STATE : !strcmp(text, "SOURCE:ZERO") ? smu_fv_zero() : smu_fv_regulation(!strcmp(arg, "ON"));
+        if (result == SMU_OK)
+            reply("OK source request; SOURCE? confirms state\r\n");
+        else
+            reply("ERR source request status=%u\r\n", result);
     } else if (!strcmp(text, "SOURCE:V")) {
         float voltage;
         const smu_status_t result = capturing || target != TARGET_NONE ? SMU_ERR_STATE : parse_reference(arg, &voltage) ? smu_fv_set_voltage(voltage) : SMU_ERR_ARG;
@@ -228,7 +236,7 @@ static void command(char* text) {
               "AUTORANGE[:I|:V] "
               "ON|OFF\r\nCAL:BEGIN V|I|BUS; CAL:CAPTURE "
               "<reference in V/A>; CAL:FIT; "
-              "CAL:POINTS?\r\nCAL:SAVE; CAL:RESET; CAL:ABORT; SOURCE?; SOURCE:V <volts>; OUTPUT ON|OFF; PING\r\n");
+              "CAL:POINTS?\r\nCAL:SAVE; CAL:RESET; CAL:ABORT; SOURCE?; SOURCE:V <volts>; SOURCE:ZERO; SOURCE:REGULATION ON|OFF; OUTPUT ON|OFF; PING\r\n");
     } else if (!strcmp(text, "PING") && !*arg)
         reply("PONG\r\n");
     else if (!strcmp(text, "ECHO") && (!strcmp(arg, "ON") || !strcmp(arg, "OFF"))) {

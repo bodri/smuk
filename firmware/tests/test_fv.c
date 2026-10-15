@@ -90,6 +90,18 @@ static void start(void) {
     assert(smu_fv_status()->state == SMU_FV_ACTIVE);
 }
 
+static void plant_tick(float gain, float offset) {
+    ++now;
+    measurement.sample_count++;
+    measurement.precision_ready = true;
+    measurement.precision.valid = measurement.precision.fresh = measurement.precision.settled = true;
+    measurement.precision.range = ctx.range;
+    measurement.precision.vrange = ctx.vrange;
+    measurement.precision_window = 8;
+    measurement.precision.voltage_V = (last_code * 3.3f / 4095.0f - 1.5f) * gain + offset;
+    smu_fv_process();
+}
+
 int main(void) {
     boot();
     assert(smu_fv_set_voltage(NAN) == SMU_ERR_ARG);
@@ -236,8 +248,8 @@ int main(void) {
     assert(last_code <= 1861);
     smu_fv_trip();
     assert(last_code == 1861 && smu_fv_status()->state == SMU_FV_TRIPPED);
-    trim = SMU_FV_ZERO_OFFSET_V;
-    assert(fabsf(trim - 0.052f) < 0.000001f);
+    trim = 0.052f;
+    assert(SMU_FV_ZERO_OFFSET_V == 0.0f);
     smu_fv_init();
     assert(smu_fv_status()->state == SMU_FV_OFF && last_code == 1855);
     assert(smu_fv_status()->minimum_V > -15.0f);
@@ -284,6 +296,72 @@ int main(void) {
     trim = -0.052f;
     smu_fv_init();
     assert(smu_fv_status()->state == SMU_FV_OFF && last_code == 1868);
+    trim = 0;
+    memset(&measurement, 0, sizeof(measurement));
+    smu_fv_init();
+    assert(!smu_fv_status()->zero_valid && !smu_fv_status()->regulation);
+    assert(smu_fv_zero() == SMU_OK);
+    assert(smu_fv_set_voltage(1) == SMU_ERR_STATE);
+    assert(smu_fv_output(true) == SMU_ERR_STATE);
+    for (unsigned i = 0; i < 8000; ++i)
+        plant_tick(10, 0.052f);
+    assert(smu_fv_status()->state == SMU_FV_OFF && smu_fv_status()->zero_valid);
+    assert(fabsf(measurement.precision.voltage_V) < 0.006f);
+    const uint16_t learned_code = last_code;
+    assert(smu_fv_regulation(true) == SMU_OK);
+    assert(smu_fv_set_voltage(1) == SMU_OK);
+    start();
+    /* Simulate an additional source-path gain error. */
+    for (unsigned i = 0; i < 5000; ++i)
+        plant_tick(9.8f, 0.052f);
+    assert(fabsf(measurement.precision.voltage_V - 1) < 0.006f);
+    assert(smu_fv_status()->correction_V > 0);
+    const uint16_t regulated_code = last_code;
+    /* A repeated precision sample must not accumulate any correction. */
+    for (unsigned i = 0; i < 500; ++i) {
+        ++now;
+        smu_fv_process();
+    }
+    assert(last_code == regulated_code);
+    measurement.precision.compliance = true;
+    for (unsigned i = 0; i < 500; ++i)
+        plant_tick(8, 0.052f);
+    assert(last_code == regulated_code && smu_fv_status()->limited);
+    measurement.precision.compliance = false;
+    assert(smu_fv_output(false) == SMU_OK && last_code == learned_code);
+    assert(smu_fv_set_voltage(-1) == SMU_OK);
+    start();
+    for (unsigned i = 0; i < 5000; ++i)
+        plant_tick(9.8f, 0.052f);
+    assert(fabsf(measurement.precision.voltage_V + 1) < 0.006f);
+    for (unsigned i = 0; i < 10000; ++i)
+        plant_tick(1, 0.052f); /* Unreachable target: bounded, no windup. */
+    assert(smu_fv_status()->limited && fabsf(smu_fv_status()->correction_V) <= 0.2f);
+    assert(smu_fv_output(false) == SMU_OK && last_code == learned_code);
+    ctx.vrange = SMU_VRANGE_6V;
+    assert(!smu_fv_status()->zero_valid);
+    assert(smu_fv_zero() == SMU_OK);
+    for (unsigned i = 0; i < 8000; ++i)
+        plant_tick(4, 0.0208f);
+    assert(smu_fv_status()->state == SMU_FV_OFF && smu_fv_status()->zero_valid);
+    assert(fabsf(measurement.precision.voltage_V) < 0.003f);
+    ctx.vrange = SMU_VRANGE_15V;
+    assert(smu_fv_status()->zero_valid && last_code == learned_code);
+    assert(smu_fv_zero() == SMU_OK);
+    /* Large external voltage must not be learned as a source offset. */
+    for (unsigned i = 0; i < 500; ++i)
+        plant_tick(10, 1.0f);
+    assert(smu_fv_status()->state == SMU_FV_TRIPPED);
+    assert(last_code == learned_code);
+    assert(smu_fv_output(false) == SMU_OK);
+    assert(smu_fv_zero() == SMU_OK);
+    assert(smu_fv_output(false) == SMU_OK); /* Explicit cancellation. */
+    assert(smu_fv_status()->state == SMU_FV_OFF && last_code == learned_code);
+    assert(smu_fv_zero() == SMU_OK);
+    measurement.precision_ready = false;
+    now += 60001;
+    smu_fv_process();
+    assert(smu_fv_status()->state == SMU_FV_TRIPPED && last_code == learned_code);
     trim = NAN;
     smu_fv_init();
     assert(smu_fv_status()->state == SMU_FV_UNAVAILABLE);

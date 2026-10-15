@@ -240,6 +240,11 @@ int main(void) {
     assert(strstr(output, "RX loss") && strstr(output, "PONG"));
     send("SOURCE?\n");
     assert(strstr(output, "SOURCE mode=FV state=0"));
+    assert(strstr(output, "regulation=0 limited=0 zero_valid=0 correction_V=0"));
+    send("SOURCE:ZERO\n");
+    assert(strstr(output, "ERR source request"));
+    send("SOURCE:REGULATION ON\n");
+    assert(strstr(output, "ERR source request"));
     send("SOURCE:V NAN\n");
     assert(strstr(output, "ERR source request"));
     send("OUTPUT ON\n");

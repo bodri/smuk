@@ -456,3 +456,21 @@ range/impedance reset behavior electrically before adding a working output stage
 ## Temporary FV source development
 
 `SOURCE?`, `SOURCE:V <volts>`, and `OUTPUT ON|OFF` are available for the temporary STM32 DAC backend. The current bench backend uses PA5, installed INA105 converter plus PA gain 5 (overall gain 10), neutral DAC voltage 1.5 V, and −15 to +15 V DUT command bounds at 10 V/s, with either fixed voltage range supported for FV (6 V uses overall gain 4 and approximately −5.9792 to +6 V bounds after zero trim); ENABLE and relay are stubbed. `SOURCE?` reports voltage bounds, slew rate and hardware capabilities. OFF requests nominal zero voltage without physical disable/isolation. See [FV DAC bring-up](../doc/fv-stm32-dac-bringup.md) for configuration, interlocks, and tests.
+
+### Measured source zero and bench voltage correction
+
+`SOURCE:ZERO` explicitly learns zero on the selected range with OUTPUT OFF,
+fixed 1.5 A current range, both autoranges OFF, HIGHZ, and healthy acquisition.
+Disconnect all external sources and leave the output unloaded first. The desktop
+SET dialog provides **Learn source zero…** with confirmation. SOURCE state 5
+means learning; OUTPUT OFF cancels; success returns state 1 and `zero_valid=1`.
+Each range keeps its own learned neutral in RAM until reboot. The previous
+hardcoded +52 mV trim is removed, so zero needs learning again after reboot.
+
+`SOURCE:REGULATION ON|OFF` selects optional bounded voltage correction while
+OUTPUT is OFF. The SET dialog exposes this as a bench control. It defaults OFF;
+the hardware compliance pin is not yet connected. The source query reports
+`regulation`, `limited`, `zero_valid`, and `correction_V`; correction is limited
+to ±0.2 V and remains subject to DAC resolution and source endpoints. OFF clears
+runtime correction and commands the accepted learned neutral without isolation.
+See [FV bring-up](../doc/fv-stm32-dac-bringup.md) for the complete bench procedure.

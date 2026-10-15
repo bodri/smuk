@@ -14,9 +14,9 @@
 #define SMU_FV_ZERO_DAC_V 1.5f
 #endif
 /* Source-only zero trim: positive measured DUT offset reduces DAC neutral.
- * External meter confirmed +52 mV at DUT terminals; does not alter ADC calibration. */
+ * Learn neutral explicitly with SOURCE:ZERO; does not alter ADC calibration. */
 #ifndef SMU_FV_ZERO_OFFSET_V
-#define SMU_FV_ZERO_OFFSET_V 0.052f
+#define SMU_FV_ZERO_OFFSET_V 0.0f
 #endif
 #ifndef SMU_FV_DAC_BUFFERED
 #define SMU_FV_DAC_BUFFERED 0

@@ -115,7 +115,15 @@ class Controller(QObject):
         except ValueError as error:
             self.error.emit(str(error))
             return
-        source_change = command.startswith("SOURCE:V ") or command.startswith("OUTPUT ")
+        source_change = command.startswith("SOURCE:") or command.startswith("OUTPUT ")
+        if command == "SOURCE:ZERO" or command.startswith("SOURCE:REGULATION "):
+            source = self.state.source
+            if not self.state.source_known or source.state != 1 or source.regulation is None or self.state.source_pending or self.calibration_active:
+                self.error.emit("Source feedback controls require confirmed OUTPUT OFF and supported firmware")
+                return
+            if command == "SOURCE:ZERO" and self.state.source_prerequisites:
+                self.error.emit("Zero learning requires healthy fixed ranges and HIGHZ input")
+                return
         if command == "OUTPUT ON":
             reasons = self.state.source_prerequisites
             if self.calibration_active or self.state.source_pending or not self.state.source_known or self.state.source.state != 1 or reasons:
@@ -127,7 +135,7 @@ class Controller(QObject):
                 self.error.emit("Voltage request outside confirmed bounds or source status unavailable")
                 return
         if command == "OUTPUT OFF":
-            self.user_queue = deque(c for c in self.user_queue if not c.startswith(("SOURCE:V ", "OUTPUT ")))
+            self.user_queue = deque(c for c in self.user_queue if not c.startswith(("SOURCE:", "OUTPUT ")))
             self.user_queue.appendleft(command)
             self.state.source_pending = True
             self.changed.emit()
@@ -207,7 +215,7 @@ class Controller(QObject):
                     self.state.source = None
                     self.state.source_pending = False
                     self.source_supported = False
-                elif reply.command.startswith(("SOURCE:V ", "OUTPUT ")):
+                elif reply.command.startswith(("SOURCE:", "OUTPUT ")):
                     self._enqueue_poll("SOURCE?")
                 if reply.command != "SOURCE?":
                     self.state.message = reply.error
@@ -240,8 +248,8 @@ class Controller(QObject):
             else:
                 self.state.source = Source.from_response(records["SOURCE"])
                 self.source_supported = True
-            self.state.source_pending = any(c.startswith(("SOURCE:V ", "OUTPUT ")) for c in self.user_queue)
-        elif reply.command.startswith(("SOURCE:V ", "OUTPUT ")):
+            self.state.source_pending = any(c.startswith(("SOURCE:", "OUTPUT ")) for c in self.user_queue)
+        elif reply.command.startswith(("SOURCE:", "OUTPUT ")):
             self._enqueue_poll("SOURCE?")
             self._enqueue_poll("STATUS?")
             self._enqueue_poll("MEAS?")

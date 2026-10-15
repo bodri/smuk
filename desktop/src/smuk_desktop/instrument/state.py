@@ -63,19 +63,34 @@ class Source:
     relay_available: bool
     received_at: float = field(default_factory=time.monotonic)
 
+    regulation: bool | None = None
+    limited: bool = False
+    zero_valid: bool = False
+    correction: float = 0.0
+
     @classmethod
     def from_response(cls, response):
         f = response.fields
         values = [float(f[k]) for k in ("requested_V", "applied_V", "minimum_V", "maximum_V", "slew_V_s")]
         state = int(f["state"])
-        if f["mode"] != "FV" or state not in range(5) or not all(math.isfinite(v) for v in values):
+        if f["mode"] != "FV" or state not in range(6) or not all(math.isfinite(v) for v in values):
             raise ValueError("Invalid FV source metadata")
         requested, applied, minimum, maximum, slew = values
         if state != 0 and (minimum >= maximum or slew <= 0 or not minimum <= requested <= maximum or not minimum <= applied <= maximum):
             raise ValueError("Invalid FV source bounds")
         if f["pa_always_enabled"] not in ("0", "1") or f["relay_available"] not in ("0", "1"):
             raise ValueError("Invalid FV hardware capabilities")
-        return cls(state, *values, f["pa_always_enabled"] == "1", f["relay_available"] == "1")
+        metadata = {}
+        if "regulation" in f:
+            if any(f.get(k) not in ("0", "1") for k in ("regulation", "limited", "zero_valid")):
+                raise ValueError("Invalid source feedback flags")
+            correction = float(f["correction_V"])
+            if not math.isfinite(correction):
+                raise ValueError("Invalid source correction")
+            metadata = dict(regulation=f["regulation"] == "1", limited=f["limited"] == "1", zero_valid=f["zero_valid"] == "1", correction=correction)
+        elif state == 5:
+            raise ValueError("Zero learning requires feedback metadata")
+        return cls(state, *values, f["pa_always_enabled"] == "1", f["relay_available"] == "1", **metadata)
 
 
 @dataclass
@@ -107,7 +122,7 @@ class InstrumentState:
 
     @property
     def source_busy(self) -> bool:
-        return bool(self.source_known and self.source.state in (2, 3))
+        return bool(self.source_known and self.source.state in (2, 3, 5))
 
     @property
     def source_prerequisites(self) -> list[str]:

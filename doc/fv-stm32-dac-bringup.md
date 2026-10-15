@@ -161,25 +161,54 @@ calibration are independent.
 
 FV accepts either fixed voltage-measurement range in firmware and desktop. The 6 V feedback gain is 2.5 times the 15 V gain, so firmware uses overall DAC-to-DUT gain 4 rather than 10, preserves the trimmed DAC neutral, and scales the advertised source limits to approximately −5.9792 to +6 V. Switch ranges with OUTPUT OFF, then select a new setpoint. Setpoints remain bounded to the nominal hardware range ±15 V; this is not a guarantee of full endpoint voltage under every load. The 10 mA software supervisory trip and independent hardware current limits are unchanged. Start low and verify endpoints with a reference instrument and suitable load before using the full range.
 
-## Source-zero trim
+## Measured zero and optional voltage correction
 
-`SMU_FV_ZERO_OFFSET_V` in `smu_fv_board.h` specifies the signed, externally
-measured DUT voltage error at the original neutral command. Its default is now
-`0.052f`, following the externally confirmed +52 mV reading at the DUT terminals.
-It does not modify ADC calibration or Flash records. Nominal neutral becomes
-1.4948 V instead of 1.5 V, with the corrected mapping
-`V_DAC = 1.4948 + V_DUT / 10`. This is an absolute correction relative to the untrimmed mapping,
-not a residual to add repeatedly on each measurement.
+The hardcoded +52 mV trim has been removed. `SMU_FV_ZERO_OFFSET_V` defaults to
+zero; measurement calibration and Flash records are unchanged. Learned source
+neutrals are separate for 6 V and 15 V and last until reboot. Startup uses the
+nominal unlearned neutral, so OFF can have a residual until zero is learned.
 
-Startup, OUTPUT OFF and source trips use the corrected neutral. Source bounds
-reported by SOURCE? are intersected with the reachable DAC range. A +52 mV trim
-reduces the negative endpoint to approximately −14.948 V; a request for −15 V is
-then rejected rather than silently clipped. The desktop adopts that bound after
-reconnect. Full-scale endpoint accuracy must be verified separately from zero.
+1. Disconnect external voltage sources and leave the output unloaded. OFF on
+   this board commands zero; it cannot isolate or disable the PA.
+2. Select HIGHZ, fixed current range 1.5 A, either fixed voltage range, and both
+   autoranges OFF. Finish measurement calibration and wait for valid readings.
+3. Send `OUTPUT OFF`, then `SOURCE:ZERO`. Alternatively open SET in the desktop
+   and select **Learn source zero…**, confirming the unloaded setup.
+4. Poll `SOURCE?`. State 5 means learning; state 1 plus `zero_valid=1` means
+   success. `OUTPUT OFF` cancels. A fault, range change, excessive error,
+   compliance indication, unstable data or a 60-second timeout prevents learning.
+   A failed/cancelled attempt retains the previous accepted neutral.
+5. Verify zero with an external meter. Repeat for the other voltage range.
 
-At nominal 3.3 V reference and overall gain 10, one 12-bit DAC code corresponds
-to about 8.06 mV at the DUT. A +52 mV trim changes the neutral code from 1861 to
-1855, about a 48.35 mV correction. Quantization, gain error, reference error and
-analog drift limit the residual. Verify the new zero with an external meter, and
-check at least one positive and negative reference before calling the source
-calibrated. The final precision DAC can improve the available adjustment step.
+Learning averages 16 non-overlapping precision windows after settling, then
+adjusts by at most one DAC step per iteration. It accepts stable readings within
+0.65 DAC step of zero. Corrections are bounded to 0.2 V referred to DUT output;
+a large measured voltage is rejected, but firmware cannot distinguish a small
+external voltage from an offset. Never learn with an external source attached.
+Learning on future ENABLE/relay hardware is inhibited until a dedicated connected
+learning sequence exists.
+
+Optional voltage correction is disabled at boot. With OUTPUT OFF, send
+`SOURCE:REGULATION ON` (or use **Enable bench voltage correction…** in SET), set
+`SOURCE:V`, and enable output. After ramping and settling, calibrated precision
+voltage closes a slow integral correction loop. Updates are separated by at
+least 100 ms plus the precision window, use each sample only once, and are
+bounded to one DAC step per update and ±0.2 V total. The source endpoint bounds
+still apply. `SOURCE:REGULATION OFF` is accepted with OUTPUT OFF.
+
+`SOURCE?` reports `regulation`, `limited`, `zero_valid` and `correction_V`.
+`requested_V` and `applied_V` remain nominal DUT ramp targets; `correction_V`
+reports the added command. The measured voltage remains the accuracy reference.
+A new setpoint or OFF clears the integral correction, while accepted zero trims
+remain. Neither enabling correction nor reconnecting automatically enables output.
+
+Compliance or current above 80% of the software trip threshold freezes
+correction; invalid acquisition retains the existing source trip behavior.
+**The LT1970A compliance pin is not connected yet.** Its current limiting may
+therefore be invisible to firmware. Use correction as an explicit bench feature
+within independently set analog current limits. `limited=1` also reports a
+correction/endpoint bound; it is not proof of hardware compliance.
+
+DAC granularity remains about 8.06 mV at the DUT on 15 V and 3.22 mV on 6 V.
+The deadband avoids chasing errors smaller than useful DAC resolution. Validate
+positive/negative setpoints and load changes with an external meter before use.
