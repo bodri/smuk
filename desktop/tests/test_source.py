@@ -19,7 +19,7 @@ def source_session(app):
     c.send("SOURCE?")
     conn.line_received.emit(SOURCE)
     app.processEvents()
-    c.state.status.update(I="1.5A", autorange="0", autorange_v="0", impedance="HIGHZ", impedance_requested="HIGHZ")
+    c.state.status.update(I="1.5A", V="15V", autorange="0", autorange_v="0", impedance="HIGHZ", impedance_requested="HIGHZ")
     c.state.acquisition.update(rate_known="1", rate_ok="1")
     return c, conn
 
@@ -126,4 +126,43 @@ def test_older_firmware_keeps_measurements_without_fv(app):
     complete_startup(app, c, conn)
     assert c.state.connected and c.state.live and c.state.source is None
     assert not c.source_supported
+    c.disconnect()
+
+
+def test_installed_converter_signed_bounds_and_setpoint(app):
+    c, conn = source_session(app)
+    c.send("SOURCE?")
+    conn.line_received.emit(SOURCE.replace("minimum_V=0", "minimum_V=-1"))
+    app.processEvents()
+    dialog = SourceDialog(c)
+    assert dialog.voltage.minimum() == -1 and dialog.voltage.maximum() == 1
+    dialog.voltage.setValue(-0.5)
+    dialog.buttons.button(QDialogButtonBox.StandardButton.Apply).click()
+    assert conn.written[-1] == "SOURCE:V -0.500000"
+    assert c.state.source_pending and c.state.source.requested == 0
+    dialog.close()
+    c.disconnect()
+
+
+def test_fv_requires_15v_measurement_range(app):
+    c, conn = source_session(app)
+    c.state.status["V"] = "6V"
+    before = len(conn.written)
+    c.send("OUTPUT ON")
+    assert len(conn.written) == before
+    assert "Select the 15 V voltage range" in c.state.source_prerequisites
+    c.disconnect()
+
+
+def test_full_bipolar_bounds_from_firmware(app):
+    c, conn = source_session(app)
+    c.send("SOURCE?")
+    conn.line_received.emit(SOURCE.replace("minimum_V=0", "minimum_V=-15").replace("maximum_V=1", "maximum_V=15").replace("slew_V_s=0.1", "slew_V_s=10"))
+    app.processEvents()
+    dialog = SourceDialog(c)
+    assert dialog.voltage.minimum() == -15 and dialog.voltage.maximum() == 15
+    dialog.voltage.setValue(-15)
+    dialog.buttons.button(QDialogButtonBox.StandardButton.Apply).click()
+    assert conn.written[-1] == "SOURCE:V -15.000000"
+    dialog.close()
     c.disconnect()

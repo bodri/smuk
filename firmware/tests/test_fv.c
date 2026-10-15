@@ -1,5 +1,6 @@
 #include "smu.h"
 #include "smu_fv.h"
+#include "smu_fv_board.h"
 #include "smu_fv_port.h"
 #include <assert.h>
 #include <math.h>
@@ -10,7 +11,8 @@ static smu_measurement_outputs_t measurement;
 static uint32_t now;
 static bool pa, relay, fail_write, fail_relay, available = true;
 static uint16_t last_code;
-static bool unipolar;
+static bool unipolar, installed_converter;
+static float trim;
 
 uint32_t smu_port_millis(void) {
     return now;
@@ -33,9 +35,12 @@ bool safety_hw_request_pa_enable(void) {
 
 bool smu_fv_port_init(smu_fv_config_t* c) {
     pa = relay = false;
-    *c = (smu_fv_config_t){3.3f, 1.65f, 10.0f, -2.0f, 2.0f, 1.0f, 0.05f, true, false, false};
+    *c = (smu_fv_config_t){3.3f, 1.65f, 10.0f, -2.0f, 2.0f, 1.0f, 0.05f, true, false, false, 0.0f};
     if (unipolar)
-        *c = (smu_fv_config_t){3.3f, 0.0f, 5.0f, 0.0f, 1.0f, 1.0f, 0.05f, false, true, true};
+        *c = (smu_fv_config_t){3.3f, 0.0f, 5.0f, 0.0f, 1.0f, 1.0f, 0.05f, false, true, true, 0.0f};
+    if (installed_converter)
+        *c = (smu_fv_config_t){SMU_FV_REFERENCE_V,   SMU_FV_ZERO_DAC_V,   SMU_FV_GAIN,           SMU_FV_MIN_V,      SMU_FV_MAX_V, SMU_FV_SLEW_V_S,
+                               SMU_FV_MAX_CURRENT_A, SMU_FV_DAC_BUFFERED, SMU_FV_PA_ENABLE_STUB, SMU_FV_RELAY_STUB, trim};
     return available;
 }
 
@@ -101,6 +106,9 @@ int main(void) {
     ctx.range = SMU_RANGE_100MA;
     assert(smu_fv_output(true) == SMU_ERR_STATE);
     ctx.range = SMU_RANGE_1P5A;
+    ctx.vrange = SMU_VRANGE_6V;
+    assert(smu_fv_output(true) == SMU_ERR_STATE);
+    ctx.vrange = SMU_VRANGE_15V;
     assert(smu_fv_set_voltage(1.0f) == SMU_OK);
     start();
     now += 10;
@@ -183,5 +191,75 @@ int main(void) {
     assert(last_code > 0);
     smu_fv_trip();
     assert(last_code == 0 && smu_fv_status()->state == SMU_FV_TRIPPED);
+    installed_converter = true;
+    smu_fv_init();
+    assert(smu_fv_status()->state == SMU_FV_OFF && last_code == 1861);
+    assert(smu_fv_status()->minimum_V == -15.0f && smu_fv_status()->maximum_V == 15.0f);
+    assert(smu_fv_set_voltage(-15.001f) == SMU_ERR_ARG);
+    assert(smu_fv_set_voltage(15.001f) == SMU_ERR_ARG);
+    const float targets[] = {-15.0f, 15.0f, -1.0f, 1.0f};
+    const uint16_t expected_codes[] = {0, 3723, 1737, 1985};
+    for (unsigned target = 0; target < 4; ++target) {
+        assert(smu_fv_set_voltage(targets[target]) == SMU_OK);
+        start();
+        for (unsigned tick = 0; tick < 1600; ++tick) {
+            ++now;
+            smu_fv_process();
+            if (tick == 499)
+                assert(fabsf(smu_fv_status()->applied_V - copysignf(fminf(5.0f, fabsf(targets[target])), targets[target])) < 0.001f);
+        }
+        assert(smu_fv_status()->state == SMU_FV_ACTIVE);
+        assert(fabsf(smu_fv_status()->applied_V - targets[target]) < 1e-6f);
+        assert(last_code == expected_codes[target]);
+        assert(smu_fv_output(false) == SMU_OK && last_code == 1861);
+    }
+    assert(smu_fv_set_voltage(15.0f) == SMU_OK);
+    start();
+    for (unsigned tick = 0; tick < 1600; ++tick) {
+        ++now;
+        smu_fv_process();
+    }
+    assert(last_code == 3723);
+    assert(smu_fv_set_voltage(-15.0f) == SMU_OK);
+    for (unsigned tick = 0; tick < 3100; ++tick) {
+        ++now;
+        smu_fv_process();
+        if (tick == 1499)
+            assert(fabsf(smu_fv_status()->applied_V) < 0.001f);
+    }
+    assert(last_code == 0 && smu_fv_status()->state == SMU_FV_ACTIVE);
+    assert(smu_fv_output(false) == SMU_OK && last_code == 1861);
+    assert(smu_fv_set_voltage(-0.5f) == SMU_OK);
+    start();
+    now += 10;
+    smu_fv_process();
+    assert(last_code <= 1861);
+    smu_fv_trip();
+    assert(last_code == 1861 && smu_fv_status()->state == SMU_FV_TRIPPED);
+    trim = SMU_FV_ZERO_OFFSET_V;
+    assert(fabsf(trim - 0.052f) < 0.000001f);
+    smu_fv_init();
+    assert(smu_fv_status()->state == SMU_FV_OFF && last_code == 1855);
+    assert(smu_fv_status()->minimum_V > -15.0f);
+    assert(fabsf(smu_fv_status()->minimum_V - (-14.948f)) < 0.0001f);
+    assert(smu_fv_set_voltage(-15.0f) == SMU_ERR_ARG);
+    assert(smu_fv_set_voltage(smu_fv_status()->minimum_V) == SMU_OK);
+    assert(smu_fv_set_voltage(0.5f) == SMU_OK);
+    start();
+    now += 10;
+    smu_fv_process();
+    assert(smu_fv_output(false) == SMU_OK && last_code == 1855);
+    assert(smu_fv_set_voltage(-0.5f) == SMU_OK);
+    start();
+    now += 10;
+    smu_fv_process();
+    smu_fv_trip();
+    assert(last_code == 1855);
+    trim = -0.052f;
+    smu_fv_init();
+    assert(smu_fv_status()->state == SMU_FV_OFF && last_code == 1868);
+    trim = NAN;
+    smu_fv_init();
+    assert(smu_fv_status()->state == SMU_FV_UNAVAILABLE);
     puts("FV sequencing, limits, slew, unavailable hardware and fault shutdown passed.");
 }

@@ -6,12 +6,17 @@
 #ifndef SMU_FV_HW_CONFIRMED
 #define SMU_FV_HW_CONFIRMED 1
 #endif
-/* Confirmed PA mapping: gain 5, direct unipolar command, no output relay fitted yet. */
+/* Installed INA105 converter plus PA gain 5: overall gain 10, bipolar command, no output relay fitted yet. */
 #ifndef SMU_FV_GAIN
-#define SMU_FV_GAIN 5.0f
+#define SMU_FV_GAIN 10.0f
 #endif
 #ifndef SMU_FV_ZERO_DAC_V
-#define SMU_FV_ZERO_DAC_V 0.0f
+#define SMU_FV_ZERO_DAC_V 1.5f
+#endif
+/* Source-only zero trim: positive measured DUT offset reduces DAC neutral.
+ * External meter confirmed +52 mV at DUT terminals; does not alter ADC calibration. */
+#ifndef SMU_FV_ZERO_OFFSET_V
+#define SMU_FV_ZERO_OFFSET_V 0.052f
 #endif
 #ifndef SMU_FV_DAC_BUFFERED
 #define SMU_FV_DAC_BUFFERED 0
@@ -29,13 +34,13 @@
 #define SMU_FV_REFERENCE_V 3.3f
 #endif
 #ifndef SMU_FV_MIN_V
-#define SMU_FV_MIN_V 0.0f
+#define SMU_FV_MIN_V -15.0f
 #endif
 #ifndef SMU_FV_MAX_V
-#define SMU_FV_MAX_V 1.0f
+#define SMU_FV_MAX_V 15.0f
 #endif
 #ifndef SMU_FV_SLEW_V_S
-#define SMU_FV_SLEW_V_S 0.1f
+#define SMU_FV_SLEW_V_S 10.0f
 #endif
 #ifndef SMU_FV_MAX_CURRENT_A
 #define SMU_FV_MAX_CURRENT_A 0.01f

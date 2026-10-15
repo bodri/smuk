@@ -455,4 +455,4 @@ range/impedance reset behavior electrically before adding a working output stage
 
 ## Temporary FV source development
 
-`SOURCE?`, `SOURCE:V <volts>`, and `OUTPUT ON|OFF` are available for the temporary STM32 DAC backend. The current bench backend uses PA5, direct PA gain 5, and 0–1 V DUT command bounds; ENABLE and relay are stubbed. `SOURCE?` reports voltage bounds, slew rate and hardware capabilities. OFF requests nominal zero voltage without physical disable/isolation. See [FV DAC bring-up](../doc/fv-stm32-dac-bringup.md) for configuration, interlocks, and tests.
+`SOURCE?`, `SOURCE:V <volts>`, and `OUTPUT ON|OFF` are available for the temporary STM32 DAC backend. The current bench backend uses PA5, installed INA105 converter plus PA gain 5 (overall gain 10), neutral DAC voltage 1.5 V, and −15 to +15 V DUT command bounds at 10 V/s, with fixed 15 V voltage range required for FV; ENABLE and relay are stubbed. `SOURCE?` reports voltage bounds, slew rate and hardware capabilities. OFF requests nominal zero voltage without physical disable/isolation. See [FV DAC bring-up](../doc/fv-stm32-dac-bringup.md) for configuration, interlocks, and tests.

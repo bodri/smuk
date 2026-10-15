@@ -169,7 +169,7 @@ and confirms the target with a fresh source query. The large readout remains the
 measured DUT voltage. Target and nominal applied command are shown during ramping.
 
 The **OUTPUT ON** button is enabled only with healthy settled readings, confirmed
-ADC rate, both autoranges OFF, current range 1.5 A, HIGHZ input, and no calibration
+ADC rate, both autoranges OFF, current range 1.5 A, voltage range 15 V, HIGHZ input, and no calibration
 session. Unmet prerequisites are displayed beneath the controls. The app does not
 silently alter instrument settings. Once starting/active, the button requests
 **OUTPUT OFF**; a tripped source can be reset explicitly with the same OFF request.
@@ -188,8 +188,9 @@ Disconnecting/closing the app does not stop the physical output; request OFF bef
 disconnecting when a zero command is wanted. Communication failure cannot guarantee
 zero output on this hardware.
 
-Firmware currently assumes the direct PA connection with gain 5 and zero offset.
-Use an external buffer to prevent unbuffered DAC loading. The proposed INA105
-bipolar converter requires a separate firmware mapping and startup protection before
-installation; it is not activated by this desktop update. Flash the matching updated
-firmware before using these controls. See [FV bring-up](../doc/fv-stm32-dac-bringup.md).
+Firmware now assumes the installed INA105 bipolar converter followed by PA gain 5:
+overall gain 10, neutral DAC voltage 1.5 V, and DUT limits −15 to +15 V and nominal slew 10 V/s.
+Reconnect after flashing; controls adopt the signed bounds reported by firmware.
+The DAC must remain buffered externally to prevent loading. Hardware startup
+protection remains necessary because the PA is always enabled; verify the midpoint
+with PA power removed before connecting/powering it. See [FV bring-up](../doc/fv-stm32-dac-bringup.md).

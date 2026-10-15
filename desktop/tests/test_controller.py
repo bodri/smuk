@@ -67,6 +67,9 @@ def complete_startup(app, controller, connection):
     assert connection.written[-1] == "SOURCE?"
     connection.line_received.emit("ERR unknown command; HELP")
     app.processEvents()
+    # Fake serial sessions supply explicit replies; avoid unsolicited timed polls
+    # during first-use Qt/font loading. Polling behavior is exercised explicitly.
+    controller.poll_timer.stop()
 
 
 def test_serialization_and_user_priority(app):

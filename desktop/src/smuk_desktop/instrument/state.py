@@ -122,6 +122,8 @@ class InstrumentState:
             reasons.append("Turn both autoranges OFF")
         if self.status.get("I") != "1.5A":
             reasons.append("Select the 1.5 A current range")
+        if self.status.get("V") != "15V":
+            reasons.append("Select the 15 V voltage range")
         if self.status.get("impedance") != "HIGHZ" or self.status.get("impedance_requested") != "HIGHZ":
             reasons.append("Select HIGHZ input")
         if self.status.get("capture") != "0":

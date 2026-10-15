@@ -63,7 +63,19 @@ void smu_fv_init(void) {
     const bool valid = isfinite(config.reference_V) && config.reference_V > 0.4f && isfinite(config.zero_dac_V) && isfinite(config.output_per_dac_V) && config.output_per_dac_V != 0.0f &&
                        isfinite(config.minimum_V) && isfinite(config.maximum_V) && config.minimum_V <= 0.0f && config.maximum_V >= 0.0f && config.minimum_V < config.maximum_V &&
                        isfinite(config.slew_V_per_s) && config.slew_V_per_s > 0.0f && isfinite(config.maximum_current_A) && config.maximum_current_A > 0.0f;
-    if (!valid || !shutdown() || !write_voltage(0.0f))
+    if (!valid || !isfinite(config.zero_offset_V))
+        return;
+    config.zero_dac_V -= config.zero_offset_V / config.output_per_dac_V;
+    /* Trimming neutral can move a full-scale endpoint outside the DAC range.
+     * Advertise only reachable physical requests rather than clipping them. */
+    const float margin = config.dac_buffered ? 0.2f : 0.0f;
+    const float endpoint_a = (margin - config.zero_dac_V) * config.output_per_dac_V;
+    const float endpoint_b = (config.reference_V - margin - config.zero_dac_V) * config.output_per_dac_V;
+    config.minimum_V = fmaxf(config.minimum_V, fminf(endpoint_a, endpoint_b));
+    config.maximum_V = fminf(config.maximum_V, fmaxf(endpoint_a, endpoint_b));
+    status.minimum_V = config.minimum_V;
+    status.maximum_V = config.maximum_V;
+    if (config.minimum_V > 0.0f || config.maximum_V < 0.0f || config.minimum_V >= config.maximum_V || !shutdown() || !write_voltage(0.0f))
         return;
     status.state = SMU_FV_OFF;
 }
@@ -71,7 +83,7 @@ void smu_fv_init(void) {
 static bool healthy(void) {
     const smu_context_t* c = smu_get_context();
     return c->state == SMU_STATE_NORMAL && !c->faults && c->measurement_valid && c->measurement_fresh && c->measurement_settled && !c->acquisition_stale && c->adc_rate_known && c->adc_rate_ok &&
-           !c->current_autorange && !c->voltage_autorange && !c->input_10m_active && !c->input_10m_requested && c->range == SMU_RANGE_1P5A;
+           !c->current_autorange && !c->voltage_autorange && !c->input_10m_active && !c->input_10m_requested && c->range == SMU_RANGE_1P5A && c->vrange == SMU_VRANGE_15V;
 }
 
 smu_status_t smu_fv_set_voltage(float voltage) {

@@ -75,12 +75,11 @@ bool smu_fv_port_init(smu_fv_config_t* config) {
     LL_DAC_SetMode(DAC1, LL_DAC_CHANNEL_2, LL_DAC_MODE_NORMAL_OPERATION);
     LL_DAC_DisableTrigger(DAC1, LL_DAC_CHANNEL_2);
     LL_DAC_ConfigOutput(DAC1, LL_DAC_CHANNEL_2, LL_DAC_OUTPUT_MODE_NORMAL, SMU_FV_DAC_BUFFERED ? LL_DAC_OUTPUT_BUFFER_ENABLE : LL_DAC_OUTPUT_BUFFER_DISABLE, LL_DAC_OUTPUT_CONNECT_GPIO);
-    *config = (smu_fv_config_t){SMU_FV_REFERENCE_V, SMU_FV_ZERO_DAC_V,    SMU_FV_GAIN,         SMU_FV_MIN_V,          SMU_FV_MAX_V,
-                                SMU_FV_SLEW_V_S,    SMU_FV_MAX_CURRENT_A, SMU_FV_DAC_BUFFERED, SMU_FV_PA_ENABLE_STUB, SMU_FV_RELAY_STUB};
+    *config = (smu_fv_config_t){SMU_FV_REFERENCE_V,   SMU_FV_ZERO_DAC_V,   SMU_FV_GAIN,           SMU_FV_MIN_V,      SMU_FV_MAX_V,        SMU_FV_SLEW_V_S,
+                                SMU_FV_MAX_CURRENT_A, SMU_FV_DAC_BUFFERED, SMU_FV_PA_ENABLE_STUB, SMU_FV_RELAY_STUB, SMU_FV_ZERO_OFFSET_V};
     ready = true;
-    /* PA is disabled throughout DAC wakeup and loading of the zero command. */
-    LL_DAC_Enable(DAC1, LL_DAC_CHANNEL_2);
-    HAL_Delay(1);
+    /* Leave the DAC disabled until the first validated neutral code is loaded.
+     * Stubbed PA ENABLE cannot provide physical startup protection. */
     return true;
 #else
     (void)config;
@@ -93,6 +92,10 @@ bool smu_fv_port_write(uint16_t code) {
     if (!ready || code > 4095u)
         return false;
     LL_DAC_ConvertData12RightAligned(DAC1, LL_DAC_CHANNEL_2, code);
+    if (!LL_DAC_IsEnabled(DAC1, LL_DAC_CHANNEL_2)) {
+        LL_DAC_Enable(DAC1, LL_DAC_CHANNEL_2);
+        HAL_Delay(1);
+    }
     return true;
 #else
     (void)code;

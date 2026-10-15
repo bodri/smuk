@@ -4,11 +4,11 @@ The firmware now contains a HAL-agnostic FV controller and an STM32H503 DAC1/cha
 
 **Current PA board has ENABLE tied to VCC and no relay.** Both controls are stubbed. `OUTPUT OFF` and fault handling attempt a neutral DAC command only; they cannot disable or isolate the PA. If the DAC write fails, the MCU hangs, or the MCU resets, firmware cannot guarantee zero output. Independent hardware current limits remain essential. `SOURCE? pa_always_enabled=1` reports this limitation.
 
-**Current default: bench DAC backend enabled on PA5.** LD2 is disabled in the updated CubeMX project and its BSP initialization is absent. The user has freed PA5; SB6 must be open so the LED driver does not load the unbuffered DAC. Startup requests nominal 0 V. Nonzero output requires explicit `SOURCE:V` and `OUTPUT ON` commands. The PA itself remains physically enabled because ENABLE is tied to VCC.
+**Current default: bench DAC backend enabled on PA5.** LD2 is disabled in the updated CubeMX project and its BSP initialization is absent. The user has freed PA5; SB6 must be open so the LED driver does not load the unbuffered DAC. Startup loads the neutral DAC code (approximately 1.5 V at PA5) before enabling DAC1 channel 2, requesting nominal 0 V at the DUT. Nonzero output requires explicit `SOURCE:V` and `OUTPUT ON` commands. The PA itself remains physically enabled because ENABLE is tied to VCC.
 
 ## Information needed to activate it
 
-- Confirmed mapping: PA gain 5 and zero offset; direct buffered DAC connection. General transfer function: `V_DUT = gain × (V_DAC − zero_dac_V)`.
+- Installed mapping: buffered DAC → INA105 (2 × VDAC − 3 V) → PA (gain 5). Overall DUT gain is 10 V/V with neutral DAC voltage 1.5 V. General transfer function: `V_DUT = gain × (V_DAC − zero_dac_V)`.
 - The measured DAC reference/analog supply voltage.
 - ENABLE is currently tied to VCC; no PA GPIO is required while `SMU_FV_PA_ENABLE_STUB=1`. No relay GPIO is required while its stub is selected.
 - Confirmed independent positive and negative hardware current limits. Firmware does not program the LT1970A current-limit inputs in this prototype.
@@ -50,7 +50,7 @@ Review the bench defaults in `smu_fv_board.h` and override the remaining definit
 
 Use floating-point constants where appropriate. GPIOs must be configured by CubeMX before `smu_init`. ENABLE must have a physical safe-default pull resistor. Recheck the actual wiring and GPIO electrical requirements before assigning pins. The firmware cannot verify those facts.
 
-The default unbuffered DAC permits nominal 0 V through the reference voltage. With direct PA gain 5 and zero offset, negative voltage requests are unsupported. Buffered mode, if selected, restricts the DAC to 0.2 V through `reference_V − 0.2 V` and cannot support this zero-offset startup. Requests outside either the configured source range or that DAC interval are rejected, not clipped. Check the buffered-output load and voltage specifications for the actual supply and load.
+The default unbuffered DAC permits nominal 0 V through the reference voltage. With the installed converter, signed DUT commands from −15 to +15 V are supported. Buffered mode, if selected, restricts the DAC to 0.2 V through `reference_V − 0.2 V`. Requests outside either the configured source range or that DAC interval are rejected, not clipped. Check the buffered-output load and voltage specifications for the actual supply and load.
 
 ## Serial commands
 
@@ -59,11 +59,11 @@ The default unbuffered DAC permits nominal 0 V through the reference voltage. Wi
 | `SOURCE?` | FV state, requested and nominal applied voltage, DAC code, backend |
 | `SOURCE:V <volts>` | Stage a finite bounded setpoint; active output slews toward it |
 | `OUTPUT ON` | Begin output sequence only when prerequisites are met |
-| `OUTPUT OFF` | Disable PA, open relay, write neutral DAC code, reset requested voltage to zero |
+| `OUTPUT OFF` | Request neutral DAC voltage and reset target to zero; real ENABLE/relay controls are used only when fitted |
 
 State numbers: 0 unavailable (backend disabled or initialization failed), 1 OFF, 2 STARTING, 3 ACTIVE, 4 TRIPPED. A trip is latched in this source controller. Correct the cause and explicitly issue `OUTPUT OFF`; it never automatically resumes. Instrument faults continue to use the existing fault handling and may require reboot.
 
-Before ON, select both fixed ranges, with current range **1.5 A** for this initial FV prototype, set both autoranges OFF and select HIGHZ input. Wait for settled valid measurement and a confirmed nominal ADC rate. Calibration sessions must be ended with `CAL:ABORT` before sourcing.
+Before ON, select both fixed ranges, with current range **1.5 A** and voltage range **15 V** for FV operation, set both autoranges OFF and select HIGHZ input. Wait for settled valid measurement and a confirmed nominal ADC rate. Calibration sessions must be ended with `CAL:ABORT` before sourcing.
 
 Example after confirmed hardware is configured:
 
@@ -94,7 +94,7 @@ Unhealthy acquisition, instrument faults, range changes, overload, excessive mea
 
 - Host tests cover startup/relay ordering, fixed-range interlocks, finite bounds, DAC quantization, slew, timer wrap, shutdown, and write failures.
 - Existing measurement/acquisition tests remain required.
-- The unbuffered DAC has higher output impedance; verify input loading, settling, and actual residual voltage at code zero. Do not add a large capacitor directly to the DAC pin without checking load limits.
+- The unbuffered DAC has higher output impedance; verify input loading, settling, and actual residual DUT voltage at the neutral code. Do not add a large capacitor directly to the DAC pin without checking load limits.
 - Test DAC startup, reset, watchdog, and debugger halt behavior on the actual hardware before connecting a DUT. Hardware ENABLE defaults/interlocks must provide the required protection if software stops executing.
 - Verify both polarities using conservative external current limits and reference instruments.
 - Confirm measured current and voltage, acquisition counters, and PA temperature throughout transitions.
@@ -103,12 +103,83 @@ Unhealthy acquisition, instrument faults, range changes, overload, excessive mea
 
 References: [STM32H503 datasheet](https://www.st.com/resource/en/datasheet/stm32h503rb.pdf) for PA5/DAC1_OUT2 and DAC limits; [ST v1.7.0 DAC LL header](https://github.com/STMicroelectronics/stm32h5xx-hal-driver/blob/v1.7.0/Inc/stm32h5xx_ll_dac.h).
 
-Current hardware revision: PA gain = 5, zero command = 0 V, no output relay. Gain, zero and relay-stub defaults are already configured. Reference, conservative bounds and hardware-limit configuration remain required; the user has confirmed independent hardware current limiting. GPIOs are not required for either stub. Relay sequencing delays remain in place for compatibility, but no physical contact opens or closes in stub mode.
+Current hardware revision: INA105 converter installed, PA gain = 5, overall gain = 10, neutral DAC voltage = 1.5 V, no output relay. Gain, zero and relay-stub defaults are already configured. Reference, conservative bounds and hardware-limit configuration remain required; the user has confirmed independent hardware current limiting. GPIOs are not required for either stub. Relay sequencing delays remain in place for compatibility, but no physical contact opens or closes in stub mode.
 
 With the always-enabled PA board, firmware boots the voltage input in HIGHZ and rejects 10 MΩ loading, even when the source controller is logically OFF. Physical PA disable, safe reset behavior and isolation must be implemented in hardware before treating this as a finished SMU. Bench bring-up should use a passive load; the zero-command/relay-stub sequence is not validated for an externally energized DUT.
 
-Bench defaults are now supplied: nominal DAC reference 3.3 V, output requests 0–1 V, slew 0.1 V/s, software current trip at 10 mA. Independent hardware limits are confirmed. `SMU_FV_HW_CONFIRMED` now defaults to 1 for PA5 bench bring-up. Set it to 0 to disable the DAC backend. Neither ENABLE nor relay GPIOs are required with both stubs selected. Verify the PA5/reference/load conditions with the PA disconnected first. These defaults do not establish calibrated source accuracy.
+Bench defaults are now supplied: nominal DAC reference 3.3 V, DUT output requests −15 to +15 V, slew 10 V/s, software current trip at 10 mA. Independent hardware limits are confirmed. `SMU_FV_HW_CONFIRMED` now defaults to 1 for PA5 bench bring-up. Set it to 0 to disable the DAC backend. Neither ENABLE nor relay GPIOs are required with both stubs selected. Verify the PA5/reference/load conditions with the PA disconnected first. These defaults do not establish calibrated source accuracy.
 
 DAC ownership: `Core/Src/dac.c` returns from `MX_DAC1_Init` inside its USER CODE block. The FV platform backend initializes DAC1 after UART transport starts and selects HCLK-compatible high-frequency mode. Keep this USER CODE block when regenerating CubeMX; do not start the DAC through a second HAL handle.
 
-Desktop FV control uses `SOURCE?` metadata: `minimum_V`, `maximum_V`, `slew_V_s`, `pa_always_enabled`, and `relay_available`. The 0–1 V limits refer to DUT commands; direct PA gain 5 means a 1 V DUT request produces nominal 0.2 V at the DAC. If the INA105 converter is later installed, use overall gain 10 and neutral DAC voltage 1.5 V, with reviewed signed bounds and hardware startup protection. Do not change to that mapping before installing the converter.
+Desktop FV control uses `SOURCE?` metadata: `minimum_V`, `maximum_V`, `slew_V_s`, `pa_always_enabled`, and `relay_available`. The −15 to +15 V limits refer to DUT commands, not DAC pin voltage. PA5 = 1.5 V + V_DUT / 10. The desktop reads these signed bounds from firmware after reconnect; no new desktop build is needed.
+
+## Installed INA105 converter: first bipolar bench check
+
+The default mapping now assumes the converter is physically installed. It is
+incompatible with the previous direct DAC-to-PA wiring. The independent hardware
+current limits, 10 V/s slew and 10 mA software supervisory threshold remain.
+
+With PA power removed, flash and reboot, then verify PA5 near 1.5 V and INA105
+output near 0 V before powering or connecting the PA. Inspect startup/reset with
+a scope if the converter remains connected. Preloading the DAC holding register
+does not control the analog pin during reset or before firmware executes. Since
+ENABLE and relay are still stubbed, firmware cannot guarantee safe startup or
+physical isolation. A hardware command clamp or controllable ENABLE is still needed.
+
+| DUT target | Nominal PA5 voltage | Nominal INA105 output |
+|---:|---:|---:|
+| −1 V | 1.40 V | −0.20 V |
+| −0.5 V | 1.45 V | −0.10 V |
+| 0 V | 1.50 V | 0 V |
+| +0.5 V | 1.55 V | +0.10 V |
+| +1 V | 1.60 V | +0.20 V |
+
+At nominal 3.3 V reference, the neutral 12-bit code is 1861. Quantization alone
+means this is not exactly 1.500000 V; measure residual output rather than treating
+`applied_V=0` as calibrated physical zero. Source-path calibration is deferred.
+
+After verifying the neutral command, use a passive load with conservative hardware
+limits. Select fixed 1.5 A / 15 V measurement ranges, both autoranges OFF, HIGHZ,
+and wait for settled valid acquisition. Test 0 V, +0.5 V, −0.5 V and OUTPUT OFF.
+The nominal ramp takes 0.5 seconds from 0 to ±0.5 V, 1 second from 0 to ±1 V,
+and 2 seconds from −15 to +15 V. Allow additional analog settling and confirm
+`SOURCE? applied_V` has reached `requested_V` before comparing voltages. Compare PA5, converter output, DUT voltage and MEAS?. Check
+STATUS? and ACQ? for faults, CRC errors and gaps after each step. OUTPUT OFF and
+faults request the same 1.5 V neutral DAC command; they do not switch off the PA.
+
+## Diagnosing source gain or offset errors
+
+`SOURCE? applied_V` is the nominal drive command, not measured DUT voltage. At
+steady commands −1, 0, and +1 V, record SOURCE?, MEAS?, a reference DMM reading,
+PA5 voltage, and INA105 output. Expected PA5 values are 1.40, 1.50, and 1.60 V;
+expected converter outputs are −0.20, 0, and +0.20 V. Confirm the sign of each
+measured output and that the source is ACTIVE rather than TRIPPED. Check hardware
+current limiting and the load before attributing an error to gain. Do not change
+the nominal gain from two readings until the DAC, converter and PA stages have
+been separated and the ramp is complete. Measurement calibration and source-path
+calibration are independent.
+
+FV now requires the fixed 15 V voltage-measurement range in firmware as well as in the desktop ON prerequisites. Setpoints remain bounded to the nominal hardware range ±15 V; this is not a guarantee of full endpoint voltage under every load. The 10 mA software supervisory trip and independent hardware current limits are unchanged. Start low and verify endpoints with a reference instrument and suitable load before using the full range.
+
+## Source-zero trim
+
+`SMU_FV_ZERO_OFFSET_V` in `smu_fv_board.h` specifies the signed, externally
+measured DUT voltage error at the original neutral command. Its default is now
+`0.052f`, following the externally confirmed +52 mV reading at the DUT terminals.
+It does not modify ADC calibration or Flash records. Nominal neutral becomes
+1.4948 V instead of 1.5 V, with the corrected mapping
+`V_DAC = 1.4948 + V_DUT / 10`. This is an absolute correction relative to the untrimmed mapping,
+not a residual to add repeatedly on each measurement.
+
+Startup, OUTPUT OFF and source trips use the corrected neutral. Source bounds
+reported by SOURCE? are intersected with the reachable DAC range. A +52 mV trim
+reduces the negative endpoint to approximately −14.948 V; a request for −15 V is
+then rejected rather than silently clipped. The desktop adopts that bound after
+reconnect. Full-scale endpoint accuracy must be verified separately from zero.
+
+At nominal 3.3 V reference and overall gain 10, one 12-bit DAC code corresponds
+to about 8.06 mV at the DUT. A +52 mV trim changes the neutral code from 1861 to
+1855, about a 48.35 mV correction. Quantization, gain error, reference error and
+analog drift limit the residual. Verify the new zero with an external meter, and
+check at least one positive and negative reference before calling the source
+calibrated. The final precision DAC can improve the available adjustment step.
