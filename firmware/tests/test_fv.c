@@ -106,7 +106,7 @@ int main(void) {
     ctx.range = SMU_RANGE_100MA;
     assert(smu_fv_output(true) == SMU_ERR_STATE);
     ctx.range = SMU_RANGE_1P5A;
-    ctx.vrange = SMU_VRANGE_6V;
+    ctx.vrange = (smu_voltage_range_t)99;
     assert(smu_fv_output(true) == SMU_ERR_STATE);
     ctx.vrange = SMU_VRANGE_15V;
     assert(smu_fv_set_voltage(1.0f) == SMU_OK);
@@ -255,6 +255,32 @@ int main(void) {
     smu_fv_process();
     smu_fv_trip();
     assert(last_code == 1855);
+    assert(smu_fv_output(false) == SMU_OK);
+    ctx.vrange = SMU_VRANGE_6V;
+    assert(fabsf(smu_fv_status()->maximum_V - 6.0f) < 0.0001f);
+    assert(fabsf(smu_fv_status()->minimum_V + 5.9792f) < 0.0001f);
+    assert(smu_fv_set_voltage(6.001f) == SMU_ERR_ARG);
+    assert(smu_fv_set_voltage(-6.0f) == SMU_ERR_ARG);
+    assert(smu_fv_set_voltage(1.0f) == SMU_OK);
+    start();
+    for (unsigned i = 0; i < 100; ++i) {
+        ++now;
+        smu_fv_process();
+    }
+    assert(fabsf(smu_fv_status()->applied_V - 1.0f) < 0.0001f);
+    assert(last_code == 2165); /* 1.4948 + 1 / 4 V at DAC. */
+    assert(smu_fv_output(false) == SMU_OK && last_code == 1855);
+    assert(smu_fv_set_voltage(-1.0f) == SMU_OK);
+    start();
+    for (unsigned i = 0; i < 100; ++i) {
+        ++now;
+        smu_fv_process();
+    }
+    assert(last_code == 1545); /* 1.4948 - 1 / 4 V at DAC. */
+    assert(smu_fv_output(false) == SMU_OK && last_code == 1855);
+    ctx.vrange = SMU_VRANGE_15V;
+    assert(fabsf(smu_fv_status()->maximum_V - 15.0f) < 0.0001f);
+    assert(smu_fv_status()->requested_V == 0.0f);
     trim = -0.052f;
     smu_fv_init();
     assert(smu_fv_status()->state == SMU_FV_OFF && last_code == 1868);

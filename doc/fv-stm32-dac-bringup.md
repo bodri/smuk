@@ -63,7 +63,7 @@ The default unbuffered DAC permits nominal 0 V through the reference voltage. Wi
 
 State numbers: 0 unavailable (backend disabled or initialization failed), 1 OFF, 2 STARTING, 3 ACTIVE, 4 TRIPPED. A trip is latched in this source controller. Correct the cause and explicitly issue `OUTPUT OFF`; it never automatically resumes. Instrument faults continue to use the existing fault handling and may require reboot.
 
-Before ON, select both fixed ranges, with current range **1.5 A** and voltage range **15 V** for FV operation, set both autoranges OFF and select HIGHZ input. Wait for settled valid measurement and a confirmed nominal ADC rate. Calibration sessions must be ended with `CAL:ABORT` before sourcing.
+Before ON, select both fixed ranges, with current range **1.5 A** and voltage range **6 V or 15 V** for FV operation, set both autoranges OFF and select HIGHZ input. Wait for settled valid measurement and a confirmed nominal ADC rate. Calibration sessions must be ended with `CAL:ABORT` before sourcing.
 
 Example after confirmed hardware is configured:
 
@@ -139,7 +139,7 @@ means this is not exactly 1.500000 V; measure residual output rather than treati
 `applied_V=0` as calibrated physical zero. Source-path calibration is deferred.
 
 After verifying the neutral command, use a passive load with conservative hardware
-limits. Select fixed 1.5 A / 15 V measurement ranges, both autoranges OFF, HIGHZ,
+limits. Select fixed 1.5 A / (6 V or 15 V) measurement ranges, both autoranges OFF, HIGHZ,
 and wait for settled valid acquisition. Test 0 V, +0.5 V, −0.5 V and OUTPUT OFF.
 The nominal ramp takes 0.5 seconds from 0 to ±0.5 V, 1 second from 0 to ±1 V,
 and 2 seconds from −15 to +15 V. Allow additional analog settling and confirm
@@ -159,7 +159,7 @@ the nominal gain from two readings until the DAC, converter and PA stages have
 been separated and the ramp is complete. Measurement calibration and source-path
 calibration are independent.
 
-FV now requires the fixed 15 V voltage-measurement range in firmware as well as in the desktop ON prerequisites. Setpoints remain bounded to the nominal hardware range ±15 V; this is not a guarantee of full endpoint voltage under every load. The 10 mA software supervisory trip and independent hardware current limits are unchanged. Start low and verify endpoints with a reference instrument and suitable load before using the full range.
+FV accepts either fixed voltage-measurement range in firmware and desktop. The 6 V feedback gain is 2.5 times the 15 V gain, so firmware uses overall DAC-to-DUT gain 4 rather than 10, preserves the trimmed DAC neutral, and scales the advertised source limits to approximately −5.9792 to +6 V. Switch ranges with OUTPUT OFF, then select a new setpoint. Setpoints remain bounded to the nominal hardware range ±15 V; this is not a guarantee of full endpoint voltage under every load. The 10 mA software supervisory trip and independent hardware current limits are unchanged. Start low and verify endpoints with a reference instrument and suitable load before using the full range.
 
 ## Source-zero trim
 

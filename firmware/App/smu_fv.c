@@ -12,9 +12,29 @@ static uint32_t last_ms, started_ms, last_poll_ms;
 static unsigned stage;
 static smu_current_range_t fixed_range;
 static smu_voltage_range_t fixed_vrange;
+static bool source_6v;
 
 bool smu_fv_busy(void) {
     return status.state == SMU_FV_STARTING || status.state == SMU_FV_ACTIVE;
+}
+
+/* The selectable sense gain is also in the PA feedback path. Preserve the
+ * trimmed DAC neutral; scale DUT gain and reachable limits together. */
+static void sync_voltage_range(void) {
+    if (smu_fv_busy())
+        return;
+    const bool range_6v = smu_get_context()->vrange == SMU_VRANGE_6V;
+    if (range_6v == source_6v)
+        return;
+    const float scale = range_6v ? 0.4f : 2.5f;
+    config.output_per_dac_V *= scale;
+    config.minimum_V *= scale;
+    config.maximum_V *= scale;
+    status.minimum_V = config.minimum_V;
+    status.maximum_V = config.maximum_V;
+    /* A setpoint from the previous range must be explicitly selected again. */
+    status.requested_V = 0.0f;
+    source_6v = range_6v;
 }
 
 static bool write_voltage(float voltage) {
@@ -52,6 +72,7 @@ void smu_fv_trip(void) {
 void smu_fv_init(void) {
     memset(&status, 0, sizeof(status));
     memset(&config, 0, sizeof(config));
+    source_6v = false;
     const bool ready = smu_fv_port_init(&config);
     status.pa_always_enabled = config.pa_enable_stub;
     status.relay_available = !config.relay_stub;
@@ -78,15 +99,18 @@ void smu_fv_init(void) {
     if (config.minimum_V > 0.0f || config.maximum_V < 0.0f || config.minimum_V >= config.maximum_V || !shutdown() || !write_voltage(0.0f))
         return;
     status.state = SMU_FV_OFF;
+    sync_voltage_range();
 }
 
 static bool healthy(void) {
     const smu_context_t* c = smu_get_context();
     return c->state == SMU_STATE_NORMAL && !c->faults && c->measurement_valid && c->measurement_fresh && c->measurement_settled && !c->acquisition_stale && c->adc_rate_known && c->adc_rate_ok &&
-           !c->current_autorange && !c->voltage_autorange && !c->input_10m_active && !c->input_10m_requested && c->range == SMU_RANGE_1P5A && c->vrange == SMU_VRANGE_15V;
+           !c->current_autorange && !c->voltage_autorange && !c->input_10m_active && !c->input_10m_requested && c->range == SMU_RANGE_1P5A &&
+           (c->vrange == SMU_VRANGE_15V || c->vrange == SMU_VRANGE_6V);
 }
 
 smu_status_t smu_fv_set_voltage(float voltage) {
+    sync_voltage_range();
     if (status.state == SMU_FV_UNAVAILABLE)
         return SMU_ERR_HW;
     if (!isfinite(voltage) || voltage < config.minimum_V || voltage > config.maximum_V)
@@ -102,6 +126,7 @@ smu_status_t smu_fv_set_voltage(float voltage) {
 }
 
 smu_status_t smu_fv_output(bool enabled) {
+    sync_voltage_range();
     if (status.state == SMU_FV_UNAVAILABLE)
         return SMU_ERR_HW;
     if (!enabled) {
@@ -178,5 +203,6 @@ void smu_fv_process(void) {
 }
 
 const smu_fv_status_t* smu_fv_status(void) {
+    sync_voltage_range();
     return &status;
 }

@@ -144,13 +144,14 @@ def test_installed_converter_signed_bounds_and_setpoint(app):
     c.disconnect()
 
 
-def test_fv_requires_15v_measurement_range(app):
+def test_fv_accepts_6v_measurement_range(app):
     c, conn = source_session(app)
     c.state.status["V"] = "6V"
     before = len(conn.written)
     c.send("OUTPUT ON")
-    assert len(conn.written) == before
-    assert "Select the 15 V voltage range" in c.state.source_prerequisites
+    assert len(conn.written) == before + 1
+    assert conn.written[-1] == "OUTPUT ON"
+    assert not c.state.source_prerequisites
     c.disconnect()
 
 

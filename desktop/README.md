@@ -169,7 +169,7 @@ and confirms the target with a fresh source query. The large readout remains the
 measured DUT voltage. Target and nominal applied command are shown during ramping.
 
 The **OUTPUT ON** button is enabled only with healthy settled readings, confirmed
-ADC rate, both autoranges OFF, current range 1.5 A, voltage range 15 V, HIGHZ input, and no calibration
+ADC rate, both autoranges OFF, current range 1.5 A, voltage range 6 V or 15 V, HIGHZ input, and no calibration
 session. Unmet prerequisites are displayed beneath the controls. The app does not
 silently alter instrument settings. Once starting/active, the button requests
 **OUTPUT OFF**; a tripped source can be reset explicitly with the same OFF request.
