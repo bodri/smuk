@@ -9,12 +9,18 @@
 *.bck
 *.kicad_pcb-bak
 *.sch-bak
+*.kicad_sch-bak
+*.kicad_pro-bak
+*-backups/
+.history/
 
 # Cache and local session settings
 *.wbk
 fp-info-cache
 _autosave-*
 *.lock
+*.lck
+*.kicad_prl
 
 # Unrouted layout saving state
 *.unrouted
