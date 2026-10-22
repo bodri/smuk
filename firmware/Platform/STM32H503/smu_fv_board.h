@@ -42,9 +42,6 @@
 #ifndef SMU_FV_SLEW_V_S
 #define SMU_FV_SLEW_V_S 10.0f
 #endif
-#ifndef SMU_FV_MAX_CURRENT_A
-#define SMU_FV_MAX_CURRENT_A 0.01f
-#endif
 #ifndef SMU_FV_EXTERNAL_LIMITS_CONFIRMED
 /* User confirmed independent hardware current limiting on the tested PA. */
 #define SMU_FV_EXTERNAL_LIMITS_CONFIRMED 1

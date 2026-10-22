@@ -1,5 +1,6 @@
 #include "ads131m03_port.h"
 #include "calibration_store.h"
+#include "range_hw.h"
 #include "range_hw_port.h"
 #include "safety_hw.h"
 #include "smu.h"
@@ -159,6 +160,9 @@ static void boot(void) {
     saved_record = force_busy = save_failure = readback_failure = false;
     safety_hw_init_safe();
     assert(smu_init());
+    assert(!smu_get_context()->voltage_autorange);
+    assert(range_hw_voltage_selected() == SMU_VRANGE_15V);
+    assert(!range_hw_input_10m_is_on());
     assert(output().precision_window == 8);
     /* The legacy health fixture exercises 8 ms after checking the boot default. */
     assert(smu_measurement_set_precision_samples(32));

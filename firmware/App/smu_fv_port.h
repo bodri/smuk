@@ -6,7 +6,6 @@
 typedef struct {
     float reference_V, zero_dac_V, output_per_dac_V;
     float minimum_V, maximum_V, slew_V_per_s;
-    float maximum_current_A;
     bool dac_buffered;
     bool pa_enable_stub;
     bool relay_stub;

@@ -35,12 +35,11 @@ bool safety_hw_request_pa_enable(void) {
 
 bool smu_fv_port_init(smu_fv_config_t* c) {
     pa = relay = false;
-    *c = (smu_fv_config_t){3.3f, 1.65f, 10.0f, -2.0f, 2.0f, 1.0f, 0.05f, true, false, false, 0.0f};
+    *c = (smu_fv_config_t){3.3f, 1.65f, 10.0f, -2.0f, 2.0f, 1.0f, true, false, false, 0.0f};
     if (unipolar)
-        *c = (smu_fv_config_t){3.3f, 0.0f, 5.0f, 0.0f, 1.0f, 1.0f, 0.05f, false, true, true, 0.0f};
+        *c = (smu_fv_config_t){3.3f, 0.0f, 5.0f, 0.0f, 1.0f, 1.0f, false, true, true, 0.0f};
     if (installed_converter)
-        *c = (smu_fv_config_t){SMU_FV_REFERENCE_V,   SMU_FV_ZERO_DAC_V,   SMU_FV_GAIN,           SMU_FV_MIN_V,      SMU_FV_MAX_V, SMU_FV_SLEW_V_S,
-                               SMU_FV_MAX_CURRENT_A, SMU_FV_DAC_BUFFERED, SMU_FV_PA_ENABLE_STUB, SMU_FV_RELAY_STUB, trim};
+        *c = (smu_fv_config_t){SMU_FV_REFERENCE_V, SMU_FV_ZERO_DAC_V, SMU_FV_GAIN, SMU_FV_MIN_V, SMU_FV_MAX_V, SMU_FV_SLEW_V_S, SMU_FV_DAC_BUFFERED, SMU_FV_PA_ENABLE_STUB, SMU_FV_RELAY_STUB, trim};
     return available;
 }
 
@@ -115,7 +114,7 @@ int main(void) {
     ctx.adc_rate_known = false;
     assert(smu_fv_output(true) == SMU_ERR_STATE);
     ctx.adc_rate_known = true;
-    ctx.range = SMU_RANGE_100MA;
+    ctx.range = SMU_RANGE_NONE;
     assert(smu_fv_output(true) == SMU_ERR_STATE);
     ctx.range = SMU_RANGE_1P5A;
     ctx.vrange = (smu_voltage_range_t)99;
@@ -130,6 +129,21 @@ int main(void) {
     smu_fv_process();
     assert(fabsf(smu_fv_status()->applied_V - 0.02f) < 1e-6f);
     assert(smu_fv_output(false) == SMU_OK && !pa && !relay && smu_fv_status()->requested_V == 0);
+    for (int range = SMU_RANGE_1P5A; range <= SMU_RANGE_100UA; ++range) {
+        boot();
+        ctx.range = (smu_current_range_t)range;
+        assert(smu_fv_set_voltage(-0.5f) == SMU_OK);
+        start();
+        ++now;
+        smu_fv_process();
+        assert(smu_fv_status()->state == SMU_FV_ACTIVE);
+        /* Any unexpected current range change must still trip the output. */
+        ctx.range = range == SMU_RANGE_1P5A ? SMU_RANGE_100MA : SMU_RANGE_1P5A;
+        ++now;
+        smu_fv_process();
+        assert(smu_fv_status()->state == SMU_FV_TRIPPED);
+        assert(smu_fv_output(false) == SMU_OK);
+    }
     for (unsigned reason = 0; reason < 7; ++reason) {
         boot();
         start();
@@ -147,7 +161,7 @@ int main(void) {
             ctx.input_10m_active = true;
             break;
         case 4:
-            measurement.fast.current_A = 0.051f;
+            measurement.fast.current_A = NAN;
             break;
         case 5:
             measurement.fast.overload = true;
@@ -316,6 +330,17 @@ int main(void) {
         plant_tick(9.8f, 0.052f);
     assert(fabsf(measurement.precision.voltage_V - 1) < 0.006f);
     assert(smu_fv_status()->correction_V > 0);
+    /* Above the former 10 mA trip and 8 mA correction cutoff, both signs
+     * remain active and correction continues without reported compliance. */
+    for (unsigned sign = 0; sign < 2; ++sign) {
+        measurement.fast.current_A = sign ? -0.02f : 0.02f;
+        for (unsigned i = 0; i < 4000; ++i)
+            plant_tick(sign ? 9.7f : 9.6f, 0.052f);
+        assert(smu_fv_status()->state == SMU_FV_ACTIVE);
+        assert(!smu_fv_status()->limited);
+        assert(fabsf(measurement.precision.voltage_V - 1) < 0.006f);
+    }
+    measurement.fast.current_A = 0;
     const uint16_t regulated_code = last_code;
     /* A repeated precision sample must not accumulate any correction. */
     for (unsigned i = 0; i < 500; ++i) {

@@ -135,8 +135,8 @@ class InstrumentState:
             reasons.append("Wait for confirmed ADC sample rate")
         if self.status.get("autorange") != "0" or self.status.get("autorange_v") != "0":
             reasons.append("Turn both autoranges OFF")
-        if self.status.get("I") != "1.5A":
-            reasons.append("Select the 1.5 A current range")
+        if self.status.get("I") not in CURRENT_RANGES:
+            reasons.append("Select a fixed current range")
         if self.status.get("V") not in ("15V", "6V"):
             reasons.append("Select a fixed 6 V or 15 V voltage range")
         if self.status.get("impedance") != "HIGHZ" or self.status.get("impedance_requested") != "HIGHZ":

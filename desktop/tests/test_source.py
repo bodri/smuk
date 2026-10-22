@@ -220,3 +220,12 @@ def test_feedback_controls_use_confirmed_metadata(app):
     assert "Enable" in dialog.regulation.text()
     dialog.close()
     c.disconnect()
+
+
+@pytest.mark.parametrize("current_range", ["1.5A", "100MA", "10MA", "1MA", "100UA"])
+def test_output_accepts_all_fixed_current_ranges(app, current_range):
+    c, conn = source_session(app)
+    c.state.status["I"] = current_range
+    c.send("OUTPUT ON")
+    assert conn.written[-1] == "OUTPUT ON"
+    c.disconnect()

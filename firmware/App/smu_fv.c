@@ -111,7 +111,7 @@ void smu_fv_init(void) {
         return;
     const bool valid = isfinite(config.reference_V) && config.reference_V > 0.4f && isfinite(config.zero_dac_V) && isfinite(config.output_per_dac_V) && config.output_per_dac_V != 0.0f &&
                        isfinite(config.minimum_V) && isfinite(config.maximum_V) && config.minimum_V <= 0.0f && config.maximum_V >= 0.0f && config.minimum_V < config.maximum_V &&
-                       isfinite(config.slew_V_per_s) && config.slew_V_per_s > 0.0f && isfinite(config.maximum_current_A) && config.maximum_current_A > 0.0f;
+                       isfinite(config.slew_V_per_s) && config.slew_V_per_s > 0.0f;
     if (!valid || !isfinite(config.zero_offset_V))
         return;
     config.zero_dac_V -= config.zero_offset_V / config.output_per_dac_V;
@@ -130,7 +130,7 @@ void smu_fv_init(void) {
 static bool healthy(void) {
     const smu_context_t* c = smu_get_context();
     return c->state == SMU_STATE_NORMAL && !c->faults && c->measurement_valid && c->measurement_fresh && c->measurement_settled && !c->acquisition_stale && c->adc_rate_known && c->adc_rate_ok &&
-           !c->current_autorange && !c->voltage_autorange && !c->input_10m_active && !c->input_10m_requested && c->range == SMU_RANGE_1P5A &&
+           !c->current_autorange && !c->voltage_autorange && !c->input_10m_active && !c->input_10m_requested && c->range >= SMU_RANGE_1P5A && c->range <= SMU_RANGE_100UA &&
            (c->vrange == SMU_VRANGE_15V || c->vrange == SMU_VRANGE_6V);
 }
 
@@ -233,9 +233,8 @@ static void feedback(const smu_measurement_outputs_t* out, uint32_t now) {
         return;
     precision_ms = now;
     feedback_sample = out->sample_count;
-    /* The physical compliance pin is not wired yet. This threshold supplements,
-     * but cannot replace, the future hardware compliance indication. */
-    if (out->precision.compliance || out->fast.compliance || fabsf(out->fast.current_A) >= config.maximum_current_A * 0.8f) {
+    /* Freeze correction on reported compliance; no fixed bench current cutoff. */
+    if (out->precision.compliance || out->fast.compliance) {
         status.limited = true;
         if (learning)
             smu_fv_trip();
@@ -312,7 +311,7 @@ void smu_fv_process(void) {
     smu_measurement_outputs_t out;
     smu_get_measurement(&out);
     const smu_context_t* c = smu_get_context();
-    if (!healthy() || c->range != fixed_range || c->vrange != fixed_vrange || out.fast.overload || !isfinite(out.fast.current_A) || fabsf(out.fast.current_A) > config.maximum_current_A) {
+    if (!healthy() || c->range != fixed_range || c->vrange != fixed_vrange || out.fast.overload || !isfinite(out.fast.current_A)) {
         smu_fv_trip();
         return;
     }

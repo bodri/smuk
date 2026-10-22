@@ -5,7 +5,7 @@
 
 #if SMU_FV_HW_CONFIRMED
 /* GPIO clocks for both control ports must be enabled by CubeMX. */
-#if !defined(SMU_FV_REFERENCE_V) || !defined(SMU_FV_MIN_V) || !defined(SMU_FV_MAX_V) || !defined(SMU_FV_SLEW_V_S) || !defined(SMU_FV_MAX_CURRENT_A) || !defined(SMU_FV_EXTERNAL_LIMITS_CONFIRMED)
+#if !defined(SMU_FV_REFERENCE_V) || !defined(SMU_FV_MIN_V) || !defined(SMU_FV_MAX_V) || !defined(SMU_FV_SLEW_V_S) || !defined(SMU_FV_EXTERNAL_LIMITS_CONFIRMED)
 #error "Confirm FV wiring, analog scaling, bounds and external hardware current limits first"
 #endif
 #if !SMU_FV_PA_ENABLE_STUB && (!defined(SMU_FV_PA_PORT) || !defined(SMU_FV_PA_PIN) || !defined(SMU_FV_PA_ACTIVE_HIGH))
@@ -75,8 +75,8 @@ bool smu_fv_port_init(smu_fv_config_t* config) {
     LL_DAC_SetMode(DAC1, LL_DAC_CHANNEL_2, LL_DAC_MODE_NORMAL_OPERATION);
     LL_DAC_DisableTrigger(DAC1, LL_DAC_CHANNEL_2);
     LL_DAC_ConfigOutput(DAC1, LL_DAC_CHANNEL_2, LL_DAC_OUTPUT_MODE_NORMAL, SMU_FV_DAC_BUFFERED ? LL_DAC_OUTPUT_BUFFER_ENABLE : LL_DAC_OUTPUT_BUFFER_DISABLE, LL_DAC_OUTPUT_CONNECT_GPIO);
-    *config = (smu_fv_config_t){SMU_FV_REFERENCE_V,   SMU_FV_ZERO_DAC_V,   SMU_FV_GAIN,           SMU_FV_MIN_V,      SMU_FV_MAX_V,        SMU_FV_SLEW_V_S,
-                                SMU_FV_MAX_CURRENT_A, SMU_FV_DAC_BUFFERED, SMU_FV_PA_ENABLE_STUB, SMU_FV_RELAY_STUB, SMU_FV_ZERO_OFFSET_V};
+    *config = (smu_fv_config_t){SMU_FV_REFERENCE_V, SMU_FV_ZERO_DAC_V,   SMU_FV_GAIN,           SMU_FV_MIN_V,      SMU_FV_MAX_V,
+                                SMU_FV_SLEW_V_S,    SMU_FV_DAC_BUFFERED, SMU_FV_PA_ENABLE_STUB, SMU_FV_RELAY_STUB, SMU_FV_ZERO_OFFSET_V};
     ready = true;
     /* Leave the DAC disabled until the first validated neutral code is loaded.
      * Stubbed PA ENABLE cannot provide physical startup protection. */

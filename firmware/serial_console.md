@@ -248,8 +248,8 @@ confirmed, a reboot may load that persisted record; recheck `CAL:SHOW?`.
 
 ## Input impedance
 
-Startup drives MV_ON LOW, then connects R26 after ADC initialization. Default
-input loading is 10 MΩ between SENSE+ and SENSE− (`MV_ON` HIGH). Select
+Startup keeps MV_ON LOW (HIGHZ); R26 is connected only on an explicit request. Default
+input loading is HIGHZ (`MV_ON` LOW). Select
 `IMPEDANCE HIGHZ` to disconnect it, or `IMPEDANCE 10M` to reconnect it.
 This setting is independent of voltage range and autorange. `STATUS?` reports
 `impedance_requested` and applied `impedance` as `10M` or `HIGHZ`.
@@ -273,7 +273,9 @@ measurement-only hardware has no active PA.
 
 ## Voltage autorange
 
-Startup selects 15 V with both current and voltage autorange enabled.
+Startup selects fixed 15 V with voltage autorange disabled, keeping VRANGE LOW.
+Current autorange remains enabled. Enable voltage autorange explicitly with
+`AUTORANGE:V ON` when suitable hardware level shifting is fitted.
 Send `AUTORANGE:V OFF` to disable automatic voltage range selection.
 `STATUS?` reports current control as `autorange` and voltage control as `autorange_v`.
 
@@ -460,7 +462,7 @@ range/impedance reset behavior electrically before adding a working output stage
 ### Measured source zero and bench voltage correction
 
 `SOURCE:ZERO` explicitly learns zero on the selected range with OUTPUT OFF,
-fixed 1.5 A current range, both autoranges OFF, HIGHZ, and healthy acquisition.
+a fixed current range, both autoranges OFF, HIGHZ, and healthy acquisition.
 Disconnect all external sources and leave the output unloaded first. The desktop
 SET dialog provides **Learn source zero…** with confirmation. SOURCE state 5
 means learning; OUTPUT OFF cancels; success returns state 1 and `zero_valid=1`.

@@ -45,7 +45,6 @@ Review the bench defaults in `smu_fv_board.h` and override the remaining definit
 | `SMU_FV_GAIN` | Signed DUT-volts per DAC-volt |
 | `SMU_FV_MIN_V`, `SMU_FV_MAX_V` | Conservative allowed output command range |
 | `SMU_FV_SLEW_V_S` | Maximum requested command slew, volts/second |
-| `SMU_FV_MAX_CURRENT_A` | Software absolute-current trip threshold; not analog compliance |
 | `SMU_FV_EXTERNAL_LIMITS_CONFIRMED` | Must be 1; independently established source/sink limits required |
 
 Use floating-point constants where appropriate. GPIOs must be configured by CubeMX before `smu_init`. ENABLE must have a physical safe-default pull resistor. Recheck the actual wiring and GPIO electrical requirements before assigning pins. The firmware cannot verify those facts.
@@ -63,7 +62,7 @@ The default unbuffered DAC permits nominal 0 V through the reference voltage. Wi
 
 State numbers: 0 unavailable (backend disabled or initialization failed), 1 OFF, 2 STARTING, 3 ACTIVE, 4 TRIPPED. A trip is latched in this source controller. Correct the cause and explicitly issue `OUTPUT OFF`; it never automatically resumes. Instrument faults continue to use the existing fault handling and may require reboot.
 
-Before ON, select both fixed ranges, with current range **1.5 A** and voltage range **6 V or 15 V** for FV operation, set both autoranges OFF and select HIGHZ input. Wait for settled valid measurement and a confirmed nominal ADC rate. Calibration sessions must be ended with `CAL:ABORT` before sourcing.
+Before ON, select both fixed ranges, with any supported fixed current range and voltage range **6 V or 15 V** for FV operation, set both autoranges OFF and select HIGHZ input. Wait for settled valid measurement and a confirmed nominal ADC rate. Calibration sessions must be ended with `CAL:ABORT` before sourcing.
 
 Example after confirmed hardware is configured:
 
@@ -107,7 +106,7 @@ Current hardware revision: INA105 converter installed, PA gain = 5, overall gain
 
 With the always-enabled PA board, firmware boots the voltage input in HIGHZ and rejects 10 MΩ loading, even when the source controller is logically OFF. Physical PA disable, safe reset behavior and isolation must be implemented in hardware before treating this as a finished SMU. Bench bring-up should use a passive load; the zero-command/relay-stub sequence is not validated for an externally energized DUT.
 
-Bench defaults are now supplied: nominal DAC reference 3.3 V, DUT output requests −15 to +15 V, slew 10 V/s, software current trip at 10 mA. Independent hardware limits are confirmed. `SMU_FV_HW_CONFIRMED` now defaults to 1 for PA5 bench bring-up. Set it to 0 to disable the DAC backend. Neither ENABLE nor relay GPIOs are required with both stubs selected. Verify the PA5/reference/load conditions with the PA disconnected first. These defaults do not establish calibrated source accuracy.
+Bench defaults are now supplied: nominal DAC reference 3.3 V, DUT output requests −15 to +15 V, slew 10 V/s, with no fixed software current threshold. Independent hardware limits are confirmed. `SMU_FV_HW_CONFIRMED` now defaults to 1 for PA5 bench bring-up. Set it to 0 to disable the DAC backend. Neither ENABLE nor relay GPIOs are required with both stubs selected. Verify the PA5/reference/load conditions with the PA disconnected first. These defaults do not establish calibrated source accuracy.
 
 DAC ownership: `Core/Src/dac.c` returns from `MX_DAC1_Init` inside its USER CODE block. The FV platform backend initializes DAC1 after UART transport starts and selects HCLK-compatible high-frequency mode. Keep this USER CODE block when regenerating CubeMX; do not start the DAC through a second HAL handle.
 
@@ -117,7 +116,7 @@ Desktop FV control uses `SOURCE?` metadata: `minimum_V`, `maximum_V`, `slew_V_s`
 
 The default mapping now assumes the converter is physically installed. It is
 incompatible with the previous direct DAC-to-PA wiring. The independent hardware
-current limits, 10 V/s slew and 10 mA software supervisory threshold remain.
+current limits and 10 V/s slew remain; the fixed software current threshold has been removed.
 
 With PA power removed, flash and reboot, then verify PA5 near 1.5 V and INA105
 output near 0 V before powering or connecting the PA. Inspect startup/reset with
@@ -139,7 +138,7 @@ means this is not exactly 1.500000 V; measure residual output rather than treati
 `applied_V=0` as calibrated physical zero. Source-path calibration is deferred.
 
 After verifying the neutral command, use a passive load with conservative hardware
-limits. Select fixed 1.5 A / (6 V or 15 V) measurement ranges, both autoranges OFF, HIGHZ,
+limits. Select a fixed current range and fixed 6 V or 15 V measurement range, both autoranges OFF, HIGHZ,
 and wait for settled valid acquisition. Test 0 V, +0.5 V, −0.5 V and OUTPUT OFF.
 The nominal ramp takes 0.5 seconds from 0 to ±0.5 V, 1 second from 0 to ±1 V,
 and 2 seconds from −15 to +15 V. Allow additional analog settling and confirm
@@ -159,7 +158,7 @@ the nominal gain from two readings until the DAC, converter and PA stages have
 been separated and the ramp is complete. Measurement calibration and source-path
 calibration are independent.
 
-FV accepts either fixed voltage-measurement range in firmware and desktop. The 6 V feedback gain is 2.5 times the 15 V gain, so firmware uses overall DAC-to-DUT gain 4 rather than 10, preserves the trimmed DAC neutral, and scales the advertised source limits to approximately −5.9792 to +6 V. Switch ranges with OUTPUT OFF, then select a new setpoint. Setpoints remain bounded to the nominal hardware range ±15 V; this is not a guarantee of full endpoint voltage under every load. The 10 mA software supervisory trip and independent hardware current limits are unchanged. Start low and verify endpoints with a reference instrument and suitable load before using the full range.
+FV accepts either fixed voltage-measurement range in firmware and desktop. The 6 V feedback gain is 2.5 times the 15 V gain, so firmware uses overall DAC-to-DUT gain 4 rather than 10, preserves the trimmed DAC neutral, and scales the advertised source limits to approximately −5.9792 to +6 V. Switch ranges with OUTPUT OFF, then select a new setpoint. Setpoints remain bounded to the nominal hardware range ±15 V; this is not a guarantee of full endpoint voltage under every load. Independent hardware current limits remain; there is no fixed software current threshold. Start low and verify endpoints with a reference instrument and suitable load before using the full range.
 
 ## Measured zero and optional voltage correction
 
@@ -170,7 +169,7 @@ nominal unlearned neutral, so OFF can have a residual until zero is learned.
 
 1. Disconnect external voltage sources and leave the output unloaded. OFF on
    this board commands zero; it cannot isolate or disable the PA.
-2. Select HIGHZ, fixed current range 1.5 A, either fixed voltage range, and both
+2. Select HIGHZ, any supported fixed current range, either fixed voltage range, and both
    autoranges OFF. Finish measurement calibration and wait for valid readings.
 3. Send `OUTPUT OFF`, then `SOURCE:ZERO`. Alternatively open SET in the desktop
    and select **Learn source zero…**, confirming the unloaded setup.
@@ -202,8 +201,7 @@ reports the added command. The measured voltage remains the accuracy reference.
 A new setpoint or OFF clears the integral correction, while accepted zero trims
 remain. Neither enabling correction nor reconnecting automatically enables output.
 
-Compliance or current above 80% of the software trip threshold freezes
-correction; invalid acquisition retains the existing source trip behavior.
+Reported compliance freezes correction; invalid acquisition retains the existing source trip behavior.
 **The LT1970A compliance pin is not connected yet.** Its current limiting may
 therefore be invisible to firmware. Use correction as an explicit bench feature
 within independently set analog current limits. `limited=1` also reports a

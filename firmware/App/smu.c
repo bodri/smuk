@@ -51,7 +51,8 @@ bool smu_init(void) {
     memset(&g, 0, sizeof(g));
     g.state = SMU_STATE_POWER_UP;
     g.current_autorange = true;
-    g.voltage_autorange = true;
+    /* Keep VRANGE LOW (15 V) until explicitly enabled/selected by the user. */
+    g.voltage_autorange = false;
 #ifdef __OPTIMIZE__
     (void)smu_log_write("SMU processing optimized=1\r\n");
 #else
@@ -80,7 +81,8 @@ bool smu_init(void) {
      * after DRDY is enabled are dropped while they settle. */
     (void)smu_range_request(&ranges, SMU_RANGE_1P5A, SMU_RANGE_REASON_USER);
     (void)smu_range_request_voltage(&ranges, SMU_VRANGE_15V);
-    (void)smu_range_request_input_10m(&ranges, !smu_fv_status()->pa_always_enabled);
+    /* Keep MV_ON LOW at boot, independently of the PA backend. */
+    (void)smu_range_request_input_10m(&ranges, false);
     smu_range_tick_ms(&ranges, 0u);
     if (ranges.tx_state == SMU_RANGE_TX_FAULT) {
         fault(SMU_FAULT_RANGE);

@@ -169,7 +169,7 @@ and confirms the target with a fresh source query. The large readout remains the
 measured DUT voltage. Target and nominal applied command are shown during ramping.
 
 The **OUTPUT ON** button is enabled only with healthy settled readings, confirmed
-ADC rate, both autoranges OFF, current range 1.5 A, voltage range 6 V or 15 V, HIGHZ input, and no calibration
+ADC rate, both autoranges OFF, a fixed current range, voltage range 6 V or 15 V, HIGHZ input, and no calibration
 session. Unmet prerequisites are displayed beneath the controls. The app does not
 silently alter instrument settings. Once starting/active, the button requests
 **OUTPUT OFF**; a tripped source can be reset explicitly with the same OFF request.
@@ -198,7 +198,7 @@ with PA power removed before connecting/powering it. See [FV bring-up](../doc/fv
 ### Measured source zero and bench voltage correction
 
 `SOURCE:ZERO` explicitly learns zero on the selected range with OUTPUT OFF,
-fixed 1.5 A current range, both autoranges OFF, HIGHZ, and healthy acquisition.
+a fixed current range, both autoranges OFF, HIGHZ, and healthy acquisition.
 Disconnect all external sources and leave the output unloaded first. The desktop
 SET dialog provides **Learn source zero…** with confirmation. SOURCE state 5
 means learning; OUTPUT OFF cancels; success returns state 1 and `zero_valid=1`.

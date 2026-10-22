@@ -136,10 +136,10 @@ Start with `HELP` or `PING`. Select precision windows with `INTEGRATION
 `CAL:SHOW?` reports calibration provenance, and captures report noise/drift. `ACQ?` reports acquisition health; measurement
 queries report freshness, settling, precision readiness, and channel clipping.
 Stale acquisition invalidates readings, and persistent failures latch an ADC fault. Current and voltage autorange are controlled
-independently with `AUTORANGE:I` and `AUTORANGE:V`; both default to enabled.
-Input loading defaults to 10 MΩ between the sense terminals; use `IMPEDANCE HIGHZ`
-to disconnect it or `IMPEDANCE 10M` to restore it.
-Voltage starts at 15 V and autorange switches up at 6.2 V magnitude and down at
+independently with `AUTORANGE:I` and `AUTORANGE:V`; current autorange defaults ON and voltage autorange defaults OFF.
+Input loading defaults to HIGHZ, keeping MV_ON LOW; use `IMPEDANCE 10M`
+to connect the 10 MΩ resistor.
+Voltage starts fixed at 15 V, keeping VRANGE LOW. When explicitly enabled, voltage autorange switches up at 6.2 V magnitude and down at
 5.0 V after 100 ms. Disable both autoranges during manual calibration.
 
 See [Serial console and manual calibration](firmware/serial_console.md) for the
