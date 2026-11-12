@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="24.4mm" height="6.4mm" viewBox="0 0 244 64" role="img" aria-labelledby="title desc">
+  <title id="title">SMUK precision wordmark</title>
+  <desc id="desc">A plus-minus symbol beside bold geometric SMUK lettering.</desc>
+  <g fill="#ffffff">
+  <path d="M 20 12 L 28 12 L 28 22 L 38 22 L 38 30 L 28 30 L 28 40 L 20 40 L 20 30 L 10 30 L 10 22 L 20 22 Z"/>
+  <path d="M 10 46 L 38 46 L 38 54 L 10 54 Z"/>
+  <path d="M 70 12 L 96 12 L 96 20 L 72 20 L 72 28 L 90 28 L 96 34 L 96 46 L 90 52 L 64 52 L 64 44 L 88 44 L 88 36 L 70 36 L 64 30 L 64 18 Z"/>
+  <path d="M 108 52 L 108 12 L 116 12 L 126 28 L 136 12 L 144 12 L 144 52 L 136 52 L 136 27 L 126 43 L 116 27 L 116 52 Z"/>
+  <path d="M 156 12 L 164 12 L 164 44 L 180 44 L 180 12 L 188 12 L 188 46 L 182 52 L 162 52 L 156 46 Z"/>
+  <path d="M 200 12 L 208 12 L 208 28 L 224 12 L 235 12 L 215 32 L 235 52 L 224 52 L 208 36 L 208 52 L 200 52 Z"/>
+  </g>
+</svg>

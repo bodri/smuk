@@ -1,0 +1,15 @@
+(footprint "SMUK_Logo_24.4mm" (version 20240108) (generator "pcbnew")
+  (layer "F.Cu")
+  (descr "Original SMUK precision wordmark; monochrome silkscreen graphic")
+  (attr board_only exclude_from_pos_files exclude_from_bom)
+  (fp_text reference "REF**" (at 0 -4) (layer "F.SilkS") hide
+    (effects (font (size 1 1) (thickness 0.15))))
+  (fp_text value "SMUK" (at 0 4) (layer "F.Fab") hide
+    (effects (font (size 1 1) (thickness 0.15))))
+  (fp_poly (pts (xy -10.200000 -2.000000) (xy -9.400000 -2.000000) (xy -9.400000 -1.000000) (xy -8.400000 -1.000000) (xy -8.400000 -0.200000) (xy -9.400000 -0.200000) (xy -9.400000 0.800000) (xy -10.200000 0.800000) (xy -10.200000 -0.200000) (xy -11.200000 -0.200000) (xy -11.200000 -1.000000) (xy -10.200000 -1.000000)) (stroke (width 0) (type solid)) (fill solid) (layer "F.SilkS"))
+  (fp_poly (pts (xy -11.200000 1.400000) (xy -8.400000 1.400000) (xy -8.400000 2.200000) (xy -11.200000 2.200000)) (stroke (width 0) (type solid)) (fill solid) (layer "F.SilkS"))
+  (fp_poly (pts (xy -5.200000 -2.000000) (xy -2.600000 -2.000000) (xy -2.600000 -1.200000) (xy -5.000000 -1.200000) (xy -5.000000 -0.400000) (xy -3.200000 -0.400000) (xy -2.600000 0.200000) (xy -2.600000 1.400000) (xy -3.200000 2.000000) (xy -5.800000 2.000000) (xy -5.800000 1.200000) (xy -3.400000 1.200000) (xy -3.400000 0.400000) (xy -5.200000 0.400000) (xy -5.800000 -0.200000) (xy -5.800000 -1.400000)) (stroke (width 0) (type solid)) (fill solid) (layer "F.SilkS"))
+  (fp_poly (pts (xy -1.400000 2.000000) (xy -1.400000 -2.000000) (xy -0.600000 -2.000000) (xy 0.400000 -0.400000) (xy 1.400000 -2.000000) (xy 2.200000 -2.000000) (xy 2.200000 2.000000) (xy 1.400000 2.000000) (xy 1.400000 -0.500000) (xy 0.400000 1.100000) (xy -0.600000 -0.500000) (xy -0.600000 2.000000)) (stroke (width 0) (type solid)) (fill solid) (layer "F.SilkS"))
+  (fp_poly (pts (xy 3.400000 -2.000000) (xy 4.200000 -2.000000) (xy 4.200000 1.200000) (xy 5.800000 1.200000) (xy 5.800000 -2.000000) (xy 6.600000 -2.000000) (xy 6.600000 1.400000) (xy 6.000000 2.000000) (xy 4.000000 2.000000) (xy 3.400000 1.400000)) (stroke (width 0) (type solid)) (fill solid) (layer "F.SilkS"))
+  (fp_poly (pts (xy 7.800000 -2.000000) (xy 8.600000 -2.000000) (xy 8.600000 -0.400000) (xy 10.200000 -2.000000) (xy 11.300000 -2.000000) (xy 9.300000 0.000000) (xy 11.300000 2.000000) (xy 10.200000 2.000000) (xy 8.600000 0.400000) (xy 8.600000 2.000000) (xy 7.800000 2.000000)) (stroke (width 0) (type solid)) (fill solid) (layer "F.SilkS"))
+)
